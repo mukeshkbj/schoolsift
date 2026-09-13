@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.egg-info/
+
+# Builds
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# OS/editor
+.DS_Store
+*.swp

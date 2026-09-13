@@ -1,0 +1,20 @@
+{
+  "id": "msg-date-conflict",
+  "provider": "outlook",
+  "account": "alex.rivera@work.example",
+  "thread_id": "thread-photo-day",
+  "sender": { "name": "Maple Grove Office", "email": "office@maplegrove.example" },
+  "reply_to": "office@maplegrove.example",
+  "subject": "Class photo day - Fri Sep 25, 3:00-4:00 PM",
+  "received_at": "2026-09-11T09:20:00Z",
+  "source": { "id": "src-maplegrove", "confirmed": true, "domain": "maplegrove.example" },
+  "body": "Hello families,\n\nClass photo day is Friday, September 25. Photographer sessions run 3:00-4:00 PM in the school hall for all grades. Please see the attached notice.\n\nMaple Grove Office",
+  "attachments": [
+    {
+      "id": "att-photo-png",
+      "name": "class-photo-notice.png",
+      "mime": "image/png",
+      "path": "class-photo-notice.png"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "schoolsift",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "pnpm --dir apps/web lint && uv run ruff check backend",
+    "typecheck": "pnpm --dir apps/web typecheck && uv run mypy backend/src",
+    "test": "pnpm --dir apps/web test && uv run pytest backend/tests",
+    "test:e2e": "pnpm --dir apps/web test:e2e",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && uv run ruff format --check backend && pnpm --dir apps/web build && pnpm test:e2e && python3 scripts/verify_no_secrets.py"
+  }
+}

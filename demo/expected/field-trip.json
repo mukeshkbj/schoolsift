@@ -1,0 +1,12 @@
+{
+  "message_id": "msg-field-trip",
+  "child": "Maya",
+  "deadline": "2026-09-18T00:00:00Z",
+  "urgency": "soon",
+  "information_only": false,
+  "proposal_kinds": ["reply", "calendar", "pdf_form"],
+  "escalation_reasons": [],
+  "forbidden_kinds": ["escalation"],
+  "pdf_fields_include": ["student_name", "guardian_name"],
+  "min_evidence": 2
+}

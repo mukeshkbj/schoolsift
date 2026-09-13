@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field
+
+from .errors import (
+    ConflictError,
+    HashMismatchError,
+    NotApprovableError,
+    NotFoundError,
+)
+
+
+class EvidenceSpan(BaseModel):
+    source: str
+    quote: str
+
+
+class ReplyProposal(BaseModel):
+    kind: Literal["reply"]
+    recipient: str
+    subject: str
+    body: str
+
+
+class CalendarProposal(BaseModel):
+    kind: Literal["calendar"]
+    title: str
+    starts_at: datetime
+    ends_at: datetime
+
+
+class PdfFormProposal(BaseModel):
+    kind: Literal["pdf_form"]
+    document_name: str
+    fields: dict[str, str]
+
+
+class EscalationProposal(BaseModel):
+    kind: Literal["escalation"]
+    reason: Literal["payment", "signature", "uncertain", "unsupported_document"]
+    detail: str
+
+
+ProposalPayload = Annotated[
+    ReplyProposal | CalendarProposal | PdfFormProposal | EscalationProposal,
+    Field(discriminator="kind"),
+]
+
+ProposalStatus = Literal["proposed", "approved", "rejected", "superseded", "completed"]
+
+
+class ProposalVersion(BaseModel):
+    id: str
+    version: int
+    status: ProposalStatus
+    payload: ProposalPayload
+    payload_hash: str
+
+
+class ActionPacket(BaseModel):
+    id: str
+    source_message_id: str
+    sender: str
+    subject: str
+    summary: str
+    child: str | None
+    deadline: datetime | None
+    urgency: Literal["none", "soon", "urgent"]
+    information_only: bool
+    evidence: list[EvidenceSpan]
+    uncertainties: list[str]
+    proposals: list[ProposalVersion]
+
+    def head_proposals(self) -> list[ProposalVersion]:
+        heads: dict[str, ProposalVersion] = {}
+        for version in self.proposals:
+            heads[version.id] = version
+        return list(heads.values())
+
+    def versions_for(self, proposal_id: str) -> list[ProposalVersion]:
+        return [v for v in self.proposals if v.id == proposal_id]
+
+
+class ActionPacketDraft(BaseModel):
+    source_message_id: str
+    school_source_id: str | None
+    summary: str
+    child: str | None = None
+    deadline: datetime | None = None
+    urgency: Literal["none", "soon", "urgent"] = "none"
+    information_only: bool = False
+    evidence: list[EvidenceSpan] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    proposals: list[ProposalPayload] = Field(default_factory=list)
+
+
+def payload_digest(payload: ProposalPayload) -> str:
+    canonical = json.dumps(
+        payload.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _head(versions: list[ProposalVersion]) -> ProposalVersion:
+    return max(versions, key=lambda v: v.version)
+
+
+def edit_proposal(
+    versions: list[ProposalVersion],
+    *,
+    proposal_id: str,
+    expected_version: int,
+    new_payload: ProposalPayload,
+) -> list[ProposalVersion]:
+    head = _head(versions)
+    if head.version != expected_version or head.status != "proposed":
+        raise ConflictError(
+            f"Proposal {proposal_id} is no longer at proposed version "
+            f"{expected_version}; refresh and reapply the edit."
+        )
+    head.status = "superseded"
+    new_version = ProposalVersion(
+        id=proposal_id,
+        version=head.version + 1,
+        status="proposed",
+        payload=new_payload,
+        payload_hash=payload_digest(new_payload),
+    )
+    return [*versions, new_version]
+
+
+def _decidable(versions: list[ProposalVersion], version: int) -> ProposalVersion:
+    for v in versions:
+        if v.version == version:
+            target = v
+            break
+    else:
+        raise NotFoundError(f"Proposal version {version} does not exist.")
+    if target is not _head(versions) or target.status != "proposed":
+        raise ConflictError(
+            f"Version {version} is not the current proposed version; "
+            "another decision or edit already won."
+        )
+    return target
+
+
+def approve_proposal(
+    versions: list[ProposalVersion], *, version: int, payload_hash: str
+) -> list[ProposalVersion]:
+    target = _decidable(versions, version)
+    if target.payload.kind == "escalation":
+        raise NotApprovableError(
+            "Escalations require a human; they can never be approved."
+        )
+    if target.payload_hash != payload_hash:
+        raise HashMismatchError(
+            "The reviewed payload has changed; refresh and review again."
+        )
+    target.status = "completed"
+    return versions
+
+
+def reject_proposal(
+    versions: list[ProposalVersion], *, version: int, payload_hash: str
+) -> list[ProposalVersion]:
+    target = _decidable(versions, version)
+    if target.payload_hash != payload_hash:
+        raise HashMismatchError(
+            "The reviewed payload has changed; refresh and review again."
+        )
+    target.status = "rejected"
+    return versions

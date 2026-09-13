@@ -1,0 +1,12 @@
+{
+  "message_id": "msg-payment-signature",
+  "child": null,
+  "deadline": null,
+  "urgency": "soon",
+  "information_only": false,
+  "proposal_kinds": ["escalation", "escalation"],
+  "escalation_reasons": ["payment", "signature"],
+  "forbidden_kinds": ["reply", "calendar", "pdf_form"],
+  "uncertainties_include": "instruction",
+  "min_evidence": 1
+}

@@ -1,43 +1,64 @@
-import type {
-  ActionPacket,
-  DemoOutcome,
-  DemoState,
-  ProposalPayload,
-  ProposalVersion,
+import { z } from "zod";
+import { getActiveHousehold, getIdToken } from "./auth";
+import { ApiError } from "./errors";
+import {
+  acceptResponseSchema,
+  actionPacketSchema,
+  apiErrorSchema,
+  approvalResponseSchema,
+  bootstrapResponseSchema,
+  dispatchResultSchema,
+  childSchema,
+  executionRecordSchema,
+  householdSchema,
+  invitationCreatedSchema,
+  invitationSchema,
+  membershipSchema,
+  oauthStartSchema,
+  proposalPayloadSchema,
+  proposalVersionSchema,
+  runRequestSchema,
+  schoolSourceSchema,
+  subscriptionPublicSchema,
+  syncResultSchema,
 } from "./contracts";
+import type { ProposalPayload } from "./contracts";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-
-  get stale(): boolean {
-    return this.status === 409;
-  }
+function requestHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  const token = getIdToken();
+  if (token !== null) headers.authorization = `Bearer ${token}`;
+  const household = getActiveHousehold();
+  if (household !== null) headers["x-schoolsift-household"] = household;
+  return headers;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<S extends z.ZodType>(
+  path: string,
+  schema: S,
+  init?: RequestInit,
+): Promise<z.infer<S>> {
   const res = await fetch(`${API}${path}`, {
-    headers: { "content-type": "application/json" },
     ...init,
+    headers: requestHeaders(),
   });
+  const body: unknown =
+    res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      error?: { code?: string; message?: string };
-    } | null;
+    const parsed = apiErrorSchema.safeParse(body);
     throw new ApiError(
       res.status,
-      body?.error?.code ?? "UNKNOWN_ERROR",
-      body?.error?.message ?? `Request failed with status ${res.status}`,
+      parsed.success ? parsed.data.error.code : "UNKNOWN_ERROR",
+      parsed.success
+        ? parsed.data.error.message
+        : `Request failed with status ${res.status}`,
     );
   }
-  return (await res.json()) as T;
+  return schema.parse(body);
 }
 
 const post = (body?: unknown) => ({
@@ -45,24 +66,54 @@ const post = (body?: unknown) => ({
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 
-export const getDemo = () => request<DemoState>("/v1/demo");
+export const getBootstrap = () =>
+  request("/v1/bootstrap", bootstrapResponseSchema);
 
-export const resetDemo = () => request<DemoState>("/v1/demo/reset", post());
+export const createHousehold = (name: string, timezone: string) =>
+  request("/v1/household", householdSchema, post({ name, timezone }));
 
-export const processInbox = (messageIds: string[] | null = null) =>
-  request<{ packets: ActionPacket[] }>(
-    "/v1/demo/process",
-    post({ message_ids: messageIds }),
+export const addChild = (name: string, school: string, grade: string) =>
+  request("/v1/children", childSchema, post({ name, school, grade }));
+
+export const startConnect = (provider: "gmail" | "outlook") =>
+  request(`/v1/connections/${provider}/authorize`, oauthStartSchema, post());
+
+export const disconnectConnection = (connectionId: string) =>
+  request(`/v1/connections/${connectionId}`, z.null(), {
+    method: "DELETE",
+  });
+
+export const syncConnection = (connectionId: string) =>
+  request(`/v1/connections/${connectionId}/sync`, syncResultSchema, post());
+
+export const enableNotifications = (connectionId: string) =>
+  request(
+    `/v1/connections/${connectionId}/notifications`,
+    subscriptionPublicSchema,
+    post(),
   );
+
+export const confirmSource = (sourceId: string) =>
+  request(`/v1/sources/${sourceId}/confirm`, schoolSourceSchema, post());
+
+export const rejectSource = (sourceId: string) =>
+  request(`/v1/sources/${sourceId}/reject`, schoolSourceSchema, post());
+
+export const processMessage = (messageId: string) =>
+  request(`/v1/messages/${messageId}/process`, actionPacketSchema, post());
 
 export const editProposal = (
   proposalId: string,
   expectedVersion: number,
   payload: ProposalPayload,
 ) =>
-  request<ProposalVersion>(
-    `/v1/demo/proposals/${proposalId}/versions`,
-    post({ expected_version: expectedVersion, payload }),
+  request(
+    `/v1/proposals/${proposalId}/versions`,
+    proposalVersionSchema,
+    post({
+      expected_version: expectedVersion,
+      payload: proposalPayloadSchema.parse(payload),
+    }),
   );
 
 export const approveProposal = (
@@ -70,17 +121,59 @@ export const approveProposal = (
   version: number,
   payloadHash: string,
 ) =>
-  request<{ version: ProposalVersion; outcome: DemoOutcome }>(
-    `/v1/demo/proposals/${proposalId}/versions/${version}/approve`,
+  request(
+    `/v1/proposals/${proposalId}/versions/${version}/approve`,
+    approvalResponseSchema,
     post({ payload_hash: payloadHash }),
   );
+
+export const listMembers = () =>
+  request("/v1/members", z.array(membershipSchema));
+
+export const listInvitations = () =>
+  request("/v1/invitations", z.array(invitationSchema));
+
+export const createInvitation = (
+  email: string,
+  role: "editor" | "viewer",
+) =>
+  request("/v1/invitations", invitationCreatedSchema, post({ email, role }));
+
+export const revokeInvitation = (invitationId: string) =>
+  request(`/v1/invitations/${invitationId}`, z.null(), { method: "DELETE" });
+
+export const acceptInvitation = (token: string) =>
+  request("/v1/invitations/accept", acceptResponseSchema, post({ token }));
+
+export const changeMemberRole = (userId: string, role: string) =>
+  request(`/v1/members/${userId}`, membershipSchema, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+
+export const removeMember = (userId: string) =>
+  request(`/v1/members/${userId}`, z.null(), { method: "DELETE" });
 
 export const rejectProposal = (
   proposalId: string,
   version: number,
   payloadHash: string,
 ) =>
-  request<ProposalVersion>(
-    `/v1/demo/proposals/${proposalId}/versions/${version}/reject`,
+  request(
+    `/v1/proposals/${proposalId}/versions/${version}/reject`,
+    proposalVersionSchema,
     post({ payload_hash: payloadHash }),
+  );
+
+export const listExecutions = () =>
+  request("/v1/executions", z.array(executionRecordSchema));
+
+export const dispatchExecutions = () =>
+  request("/v1/executions/dispatch", dispatchResultSchema, post());
+
+export const runExecution = (executionId: string) =>
+  request(
+    `/v1/executions/${executionId}/run`,
+    executionRecordSchema,
+    post(runRequestSchema.parse({ confirm: true })),
   );

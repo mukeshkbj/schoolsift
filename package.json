@@ -10,6 +10,8 @@
     "typecheck": "pnpm --dir apps/web typecheck && uv run mypy backend/src",
     "test": "pnpm --dir apps/web test && uv run pytest backend/tests",
     "test:e2e": "pnpm --dir apps/web test:e2e",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && uv run ruff format --check backend && pnpm --dir apps/web build && pnpm test:e2e && python3 scripts/verify_no_secrets.py"
+    "infra:test": "pnpm --dir infra test && pnpm --dir infra typecheck",
+    "infra:synth": "pnpm --dir infra synth",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && uv run ruff format --check backend && pnpm --dir apps/web build && pnpm test:e2e && pnpm infra:test && pnpm infra:synth && python3 scripts/verify_no_secrets.py"
   }
 }

@@ -5,9 +5,20 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".venv", "node_modules", ".next", "dist", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "node_modules",
+    ".next",
+    "dist",
+    "__pycache__",
+    "cdk.out",
+}
 SKIP_SUFFIXES = {".lock", ".png", ".pdf", ".docx", ".xlsx"}
 SKIP_NAMES = {"uv.lock", "pnpm-lock.yaml", "verify_no_secrets.py"}
+# Generated Archify viewer bundles (docs/architecture/*.html) contain minified
+# runtime code; their JSON sources are still scanned.
+SKIP_GENERATED = ROOT / "docs" / "architecture"
 
 PATTERNS = [
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -26,6 +37,8 @@ def main() -> int:
         if any(part in SKIP_DIRS for part in path.parts):
             continue
         if path.suffix in SKIP_SUFFIXES or path.name in SKIP_NAMES:
+            continue
+        if path.suffix == ".html" and path.is_relative_to(SKIP_GENERATED):
             continue
         try:
             text = path.read_text(errors="strict")

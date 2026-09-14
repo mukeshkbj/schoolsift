@@ -116,12 +116,12 @@ class TestEdit:
 
 
 class TestApproveReject:
-    def test_approve_marks_completed(self):
+    def test_approve_marks_approved(self):
         versions = v1()
         out = approve_proposal(
             versions, version=1, payload_hash=versions[0].payload_hash
         )
-        assert out[0].status == "completed"
+        assert out[0].status == "approved"
 
     def test_approve_with_wrong_hash_conflicts(self):
         versions = v1()
@@ -144,12 +144,12 @@ class TestApproveReject:
         versions = approve_proposal(
             versions, version=1, payload_hash=versions[0].payload_hash
         )
-        assert versions[0].status == "completed"
+        assert versions[0].status == "approved"
         with pytest.raises(ConflictError):
             reject_proposal(versions, version=1, payload_hash=versions[0].payload_hash)
         with pytest.raises(ConflictError):
             approve_proposal(versions, version=1, payload_hash=versions[0].payload_hash)
-        assert versions[0].status == "completed"
+        assert versions[0].status == "approved"
 
     def test_rejected_stays_rejected(self):
         versions = v1()
@@ -179,3 +179,82 @@ class TestApproveReject:
             versions, version=1, payload_hash=versions[0].payload_hash
         )
         assert out[0].status == "rejected"
+
+
+class TestBounds:
+    def test_oversized_reply_body_rejected(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            reply("x" * 100_001)
+
+    def test_max_reply_body_accepted(self):
+        assert reply("x" * 100_000).body == "x" * 100_000
+
+    def test_oversized_subject_rejected(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ReplyProposal(
+                kind="reply",
+                recipient="a@b.example",
+                subject="s" * 1_001,
+                body="b",
+            )
+
+    def test_pdf_fields_bounded(self):
+        from pydantic import ValidationError
+
+        from schoolsift.domain import PdfFormProposal
+
+        base = {
+            "kind": "pdf_form",
+            "recipient": "school@example.org",
+            "subject": "Completed form",
+            "body": "Attached.",
+            "document_name": "form.pdf",
+        }
+        ok = PdfFormProposal(**base, fields={"f": "v" * 10_000})
+        assert ok.fields["f"] == "v" * 10_000
+        with pytest.raises(ValidationError):
+            PdfFormProposal(**base, fields={"f": "v" * 10_001})
+        with pytest.raises(ValidationError):
+            PdfFormProposal(**base, fields={f"k{i}": "v" for i in range(201)})
+
+    def test_draft_collections_bounded(self):
+        from pydantic import ValidationError
+
+        from schoolsift.domain import ActionPacketDraft, EvidenceSpan
+
+        with pytest.raises(ValidationError):
+            ActionPacketDraft(
+                source_message_id="m",
+                school_source_id=None,
+                summary="s" * 10_001,
+            )
+        with pytest.raises(ValidationError):
+            ActionPacketDraft(
+                source_message_id="m",
+                school_source_id=None,
+                summary="s",
+                evidence=[EvidenceSpan(source="body", quote="q")] * 101,
+            )
+        with pytest.raises(ValidationError):
+            ActionPacketDraft(
+                source_message_id="m",
+                school_source_id=None,
+                summary="s",
+                uncertainties=["u"] * 101,
+            )
+        with pytest.raises(ValidationError):
+            ActionPacketDraft(
+                source_message_id="m",
+                school_source_id=None,
+                summary="s",
+                proposals=[
+                    ReplyProposal(
+                        kind="reply", recipient="a@b.c", subject="s", body="b"
+                    )
+                ]
+                * 51,
+            )

@@ -1,15 +1,25 @@
-import type { ActionPacket, ProposalPayload, ProposalVersion } from "../lib/contracts";
+import type {
+  ActionPacket,
+  ExecutionRecord,
+  ProposalPayload,
+  ProposalVersion,
+} from "../lib/contracts";
 import { headProposals } from "../lib/contracts";
 import ProposalReview from "./ProposalReview";
 
 type Props = {
+  readOnly?: boolean;
   packet: ActionPacket;
+  executions?: ExecutionRecord[];
+  localMode?: boolean;
   busyKey: string | null;
   conflicts: Record<string, string>;
   onSave: (version: ProposalVersion, payload: ProposalPayload) => Promise<void>;
   onApprove: (version: ProposalVersion) => Promise<void>;
   onReject: (version: ProposalVersion) => Promise<void>;
   onReload: () => Promise<void>;
+  onDispatch?: () => Promise<void>;
+  onRun?: (execution: ExecutionRecord) => Promise<void>;
 };
 
 const URGENCY_LABEL = { none: "No rush", soon: "Soon", urgent: "Urgent" };
@@ -24,14 +34,21 @@ function fmtDate(iso: string | null): string | null {
 
 export default function ActionPacketView({
   packet,
+  executions = [],
+  localMode = false,
   busyKey,
   conflicts,
   onSave,
   onApprove,
   onReject,
   onReload,
+  onDispatch,
+  onRun,
+  readOnly = false,
 }: Props) {
   const heads = headProposals(packet);
+  const executionFor = (proposalId: string) =>
+    executions.find((e) => e.proposal_id === proposalId) ?? null;
   const deadline = fmtDate(packet.deadline);
 
   return (
@@ -93,12 +110,17 @@ export default function ActionPacketView({
             <ProposalReview
               key={`${v.id}@${v.version}`}
               version={v}
+              execution={executionFor(v.id)}
+              localMode={localMode}
               busyKey={busyKey}
               conflict={conflicts[`${v.id}:approve`] ?? conflicts[`${v.id}:edit`] ?? conflicts[`${v.id}:reject`] ?? null}
+              readOnly={readOnly}
               onSave={onSave}
               onApprove={onApprove}
               onReject={onReject}
               onReload={onReload}
+              onDispatch={onDispatch}
+              onRun={onRun}
             />
           ))
         )}

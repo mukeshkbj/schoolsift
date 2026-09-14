@@ -1,0 +1,415 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+
+from schoolsift.domain import (
+    ActionPacketDraft,
+    CalendarProposal,
+    EvidenceSpan,
+    PdfFormProposal,
+    ReplyProposal,
+)
+from schoolsift.errors import (
+    AgentError,
+    ConflictError,
+    NotFoundError,
+    UnsafeAgentOutputError,
+)
+from schoolsift.models import AttachmentContent, FetchedMessage, MessageHeader
+from schoolsift.processing import process_message
+from schoolsift.sqlite_store import SQLiteStore
+
+
+class FakeAnalyzer:
+    def __init__(
+        self,
+        draft: ActionPacketDraft | None = None,
+        *,
+        fail: Exception | None = None,
+    ) -> None:
+        self.draft = draft
+        self.fail = fail
+        self.calls: list[tuple[str, str]] = []
+
+    def analyze(self, household_id: str, message_id: str) -> ActionPacketDraft:
+        self.calls.append((household_id, message_id))
+        if self.fail:
+            raise self.fail
+        assert self.draft is not None
+        return self.draft
+
+
+def draft_for(message_id: str, proposals=None) -> ActionPacketDraft:
+    return ActionPacketDraft(
+        source_message_id=message_id,
+        school_source_id=None,
+        summary="Field trip permission needed.",
+        child="Kid",
+        deadline=datetime(2026, 9, 18, tzinfo=UTC),
+        urgency="soon",
+        evidence=[EvidenceSpan(source="body", quote="due Friday")],
+        proposals=proposals
+        if proposals is not None
+        else [
+            ReplyProposal(
+                kind="reply",
+                recipient="office@school.org",
+                subject="Re: Trip",
+                body="Yes, Kid will attend.",
+            )
+        ],
+    )
+
+
+@pytest.fixture()
+def env(tmp_path):
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    store.initialize()
+    h = store.create_household(name="H", timezone="UTC")
+    conn = store.upsert_connection(
+        h.id, provider="gmail", provider_subject="s1", email="me@x.com"
+    )
+    header = MessageHeader(
+        provider_message_id="pm-1",
+        thread_id="thread-1",
+        sender_name="Office",
+        sender_email="office@school.org",
+        reply_to="office@school.org",
+        subject="Field trip",
+        received_at=datetime(2026, 9, 10, tzinfo=UTC),
+    )
+    fetched = FetchedMessage(
+        **header.model_dump(),
+        body_text="Trip money due Friday",
+        attachments=[
+            AttachmentContent(
+                provider_attachment_id="pm-1:0",
+                name="form.pdf",
+                mime="application/pdf",
+                content=b"pdf",
+            )
+        ],
+    )
+    record = store.save_fetched_message(
+        h.id,
+        conn.id,
+        fetched,
+        body_ref="ref-body",
+        attachments=[
+            (
+                "form.pdf",
+                "application/pdf",
+                "ref-att",
+                ["student_name", "Parent Signature"],
+            ),
+            ("note.txt", "text/plain", "ref-txt", []),
+        ],
+    )
+    return store, h, conn, record
+
+
+def test_process_creates_packet_and_marks_processed(env):
+    store, h, _, record = env
+    analyzer = FakeAnalyzer(draft_for(record.id))
+    packet = process_message(h.id, record.id, store=store, analyzer=analyzer)
+    assert analyzer.calls == [(h.id, record.id)]
+    assert packet.source_message_id == record.id
+    assert packet.sender == "Office <office@school.org>"
+    assert packet.proposals[0].version == 1
+    assert packet.proposals[0].status == "proposed"
+    assert packet.proposals[0].id.startswith("prop-")
+    assert packet.id.startswith("pkt-")
+    assert store.get_message_record(h.id, record.id).status == "processed"
+    assert store.get_packet(h.id, packet.id).summary == "Field trip permission needed."
+
+
+def test_repeat_returns_existing_packet(env):
+    store, h, _, record = env
+    analyzer = FakeAnalyzer(draft_for(record.id))
+    first = process_message(h.id, record.id, store=store, analyzer=analyzer)
+    second = process_message(
+        h.id, record.id, store=store, analyzer=FakeAnalyzer(fail=RuntimeError("nope"))
+    )
+    assert second.id == first.id
+    assert analyzer.calls == [(h.id, record.id)]
+
+
+def test_wrong_status_rejected(env):
+    store, h, conn, record = env
+    store.set_message_status(h.id, conn.id, "pm-1", "awaiting_source")
+    con = __import__("sqlite3").connect(store.path)
+    try:
+        con.execute(
+            "UPDATE messages SET source_confirmed = 0 WHERE id = ?",
+            (record.id,),
+        )
+        con.commit()
+    finally:
+        con.close()
+    with pytest.raises(ConflictError):
+        process_message(
+            h.id, record.id, store=store, analyzer=FakeAnalyzer(draft_for(record.id))
+        )
+
+
+def test_cross_household_denied(env):
+    store, _, _, record = env
+    with pytest.raises(NotFoundError):
+        process_message(
+            "hh-other",
+            record.id,
+            store=store,
+            analyzer=FakeAnalyzer(draft_for(record.id)),
+        )
+
+
+def test_wrong_source_message_id_marks_failed(env):
+    store, h, _, record = env
+    bad = draft_for("msg-elsewhere")
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    msg = store.get_message_record(h.id, record.id)
+    assert msg.status == "failed"
+    assert msg.manual_review_reason is not None
+    assert store.list_packets(h.id) == []
+
+
+def test_evidence_unknown_source_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(record.id)
+    bad.evidence = [EvidenceSpan(source="evil.pdf", quote="q")]
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    assert store.get_message_record(h.id, record.id).status == "failed"
+
+
+def test_naive_deadline_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(record.id)
+    bad.deadline = datetime(2026, 9, 18)
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_reply_recipient_guard(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            ReplyProposal(
+                kind="reply",
+                recipient="attacker@evil.example",
+                subject="Re: Trip",
+                body="send money",
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    assert store.get_message_record(h.id, record.id).status == "failed"
+
+
+def test_reply_recipient_accepts_reply_to(env):
+    store, h, _, record = env
+    ok = draft_for(
+        record.id,
+        proposals=[
+            ReplyProposal(
+                kind="reply",
+                recipient="Office <office@school.org>",
+                subject="Re: Trip",
+                body="ok",
+            )
+        ],
+    )
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(ok))
+    assert packet.proposals[0].payload.recipient == "Office <office@school.org>"
+
+
+def test_pdf_form_sensitive_field_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="form.pdf",
+                fields={"Parent Signature": "Jane Doe"},
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_pdf_form_unknown_document_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="not-here.pdf",
+                fields={"name": "Kid"},
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_pdf_form_safe_field_accepted(env):
+    store, h, _, record = env
+    ok = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="form.pdf",
+                fields={"student_name": "Kid"},
+            )
+        ],
+    )
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(ok))
+    assert packet.proposals[0].payload.kind == "pdf_form"
+
+
+def test_calendar_proposal_naive_times_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            CalendarProposal(
+                kind="calendar",
+                title="Trip",
+                starts_at=datetime(2026, 9, 18, 9),
+                ends_at=datetime(2026, 9, 18, 15),
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_analyzer_crash_marks_failed_sanitized(env):
+    store, h, _, record = env
+    with pytest.raises(AgentError) as e:
+        process_message(
+            h.id,
+            record.id,
+            store=store,
+            analyzer=FakeAnalyzer(fail=RuntimeError("model internals tok-xyz")),
+        )
+    assert "tok-xyz" not in e.value.message
+    assert store.get_message_record(h.id, record.id).status == "failed"
+    assert store.list_packets(h.id) == []
+
+
+def test_information_only_with_proposals_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(record.id)
+    bad.information_only = True
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    assert store.get_message_record(h.id, record.id).status == "failed"
+    assert store.list_packets(h.id) == []
+
+
+def test_pdf_form_unknown_field_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="form.pdf",
+                fields={"not_a_field": "x"},
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_pdf_form_non_pdf_document_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="note.txt",
+                fields={"student_name": "Kid"},
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_calendar_end_before_start_rejected(env):
+    store, h, _, record = env
+    bad = draft_for(
+        record.id,
+        proposals=[
+            CalendarProposal(
+                kind="calendar",
+                title="Trip",
+                starts_at=datetime(2026, 9, 18, 15, tzinfo=UTC),
+                ends_at=datetime(2026, 9, 18, 14, tzinfo=UTC),
+            )
+        ],
+    )
+    with pytest.raises(UnsafeAgentOutputError):
+        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+
+
+def test_concurrent_processing_persists_single_packet(env):
+    import threading
+
+    store, h, _, record = env
+    barrier = threading.Barrier(2)
+    results: list = []
+    errors: list = []
+
+    def attempt() -> None:
+        try:
+            barrier.wait(timeout=10)
+            results.append(
+                process_message(
+                    h.id,
+                    record.id,
+                    store=store,
+                    analyzer=FakeAnalyzer(draft_for(record.id)),
+                )
+            )
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=attempt) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(20)
+    assert not errors
+    assert len(results) == 2
+    assert results[0].id == results[1].id
+    assert len(store.list_packets(h.id)) == 1
+    assert store.get_message_record(h.id, record.id).status == "processed"

@@ -14,36 +14,42 @@ from .errors import (
     NotFoundError,
 )
 
+BoundedStr = Annotated[str, Field(max_length=1_000)]
+FieldValue = Annotated[str, Field(max_length=10_000)]
+
 
 class EvidenceSpan(BaseModel):
-    source: str
-    quote: str
+    source: str = Field(max_length=1_000)
+    quote: str = Field(max_length=10_000)
 
 
 class ReplyProposal(BaseModel):
     kind: Literal["reply"]
-    recipient: str
-    subject: str
-    body: str
+    recipient: str = Field(max_length=500)
+    subject: str = Field(max_length=1_000)
+    body: str = Field(max_length=100_000)
 
 
 class CalendarProposal(BaseModel):
     kind: Literal["calendar"]
-    title: str
+    title: str = Field(max_length=1_000)
     starts_at: datetime
     ends_at: datetime
 
 
 class PdfFormProposal(BaseModel):
     kind: Literal["pdf_form"]
-    document_name: str
-    fields: dict[str, str]
+    recipient: str = Field(max_length=500)
+    subject: str = Field(max_length=1_000)
+    body: str = Field(max_length=100_000)
+    document_name: str = Field(max_length=1_000)
+    fields: dict[FieldValue, FieldValue] = Field(max_length=200)
 
 
 class EscalationProposal(BaseModel):
     kind: Literal["escalation"]
     reason: Literal["payment", "signature", "uncertain", "unsupported_document"]
-    detail: str
+    detail: str = Field(max_length=10_000)
 
 
 ProposalPayload = Annotated[
@@ -63,18 +69,18 @@ class ProposalVersion(BaseModel):
 
 
 class ActionPacket(BaseModel):
-    id: str
-    source_message_id: str
-    sender: str
-    subject: str
-    summary: str
-    child: str | None
+    id: str = Field(max_length=200)
+    source_message_id: str = Field(max_length=500)
+    sender: str = Field(max_length=1_000)
+    subject: str = Field(max_length=1_000)
+    summary: str = Field(max_length=10_000)
+    child: str | None = Field(max_length=500)
     deadline: datetime | None
     urgency: Literal["none", "soon", "urgent"]
     information_only: bool
-    evidence: list[EvidenceSpan]
-    uncertainties: list[str]
-    proposals: list[ProposalVersion]
+    evidence: list[EvidenceSpan] = Field(max_length=100)
+    uncertainties: list[BoundedStr] = Field(max_length=100)
+    proposals: list[ProposalVersion] = Field(max_length=500)
 
     def head_proposals(self) -> list[ProposalVersion]:
         heads: dict[str, ProposalVersion] = {}
@@ -87,16 +93,16 @@ class ActionPacket(BaseModel):
 
 
 class ActionPacketDraft(BaseModel):
-    source_message_id: str
-    school_source_id: str | None
-    summary: str
-    child: str | None = None
+    source_message_id: str = Field(max_length=500)
+    school_source_id: str | None = Field(max_length=500)
+    summary: str = Field(max_length=10_000)
+    child: str | None = Field(default=None, max_length=500)
     deadline: datetime | None = None
     urgency: Literal["none", "soon", "urgent"] = "none"
     information_only: bool = False
-    evidence: list[EvidenceSpan] = Field(default_factory=list)
-    uncertainties: list[str] = Field(default_factory=list)
-    proposals: list[ProposalPayload] = Field(default_factory=list)
+    evidence: list[EvidenceSpan] = Field(default_factory=list, max_length=100)
+    uncertainties: list[BoundedStr] = Field(default_factory=list, max_length=100)
+    proposals: list[ProposalPayload] = Field(default_factory=list, max_length=50)
 
 
 def payload_digest(payload: ProposalPayload) -> str:
@@ -164,7 +170,7 @@ def approve_proposal(
         raise HashMismatchError(
             "The reviewed payload has changed; refresh and review again."
         )
-    target.status = "completed"
+    target.status = "approved"
     return versions
 
 

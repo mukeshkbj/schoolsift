@@ -1,4 +1,7 @@
 import Link from "next/link";
+import SignIn from "../components/SignIn";
+
+const cognito = process.env.NEXT_PUBLIC_SCHOOLSIFT_AUTH_MODE === "cognito";
 
 export default function Landing() {
   return (
@@ -21,12 +24,16 @@ export default function Landing() {
           <span className="sift-line" />
           <span className="sift-node" />
         </div>
-        <Link href="/demo" className="btn btn-primary btn-hero">
-          Try the demo
-        </Link>
+        {cognito ? (
+          <SignIn />
+        ) : (
+          <Link href="/app" className="btn btn-primary btn-hero">
+            Open SchoolSift
+          </Link>
+        )}
         <p className="landing-note">
-          Fully synthetic demo data — no inbox access needed, nothing real is
-          ever sent.
+          Local-first: your data stays in a local database until you connect an
+          inbox.
         </p>
       </div>
     </main>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type {
   CalendarPayload,
+  ExecutionRecord,
   PdfFormPayload,
   ProposalPayload,
   ProposalVersion,
@@ -10,19 +11,24 @@ import type {
 } from "../lib/contracts";
 
 type Props = {
+  readOnly?: boolean;
   version: ProposalVersion;
+  execution?: ExecutionRecord | null;
+  localMode?: boolean;
   busyKey: string | null;
   conflict: string | null;
   onSave: (version: ProposalVersion, payload: ProposalPayload) => Promise<void>;
   onApprove: (version: ProposalVersion) => Promise<void>;
   onReject: (version: ProposalVersion) => Promise<void>;
   onReload: () => Promise<void>;
+  onDispatch?: () => Promise<void>;
+  onRun?: (execution: ExecutionRecord) => Promise<void>;
 };
 
 const APPROVE_LABEL: Record<string, string> = {
-  reply: "Send demo reply",
-  calendar: "Add to demo calendar",
-  pdf_form: "Complete demo form",
+  reply: "Approve reply",
+  calendar: "Approve calendar event",
+  pdf_form: "Approve completed form",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -38,6 +44,41 @@ const DIRTY_NOTE: Record<string, string> = {
   pdf_form: "Save your edits before completing the form.",
 };
 
+const EXECUTION_LABEL: Record<string, string> = {
+  pending_dispatch: "Pending — approved but not yet dispatched.",
+  queued: "Queued — ready to run against the connected account.",
+  executing: "Executing against the connected account.",
+  completed: "Completed — the provider accepted the action.",
+  failed: "Failed — the action did not complete.",
+  delivery_uncertain:
+    "Delivery uncertain — the provider may have completed it; it will not be retried automatically.",
+};
+
+function approvalConsequence(version: ProposalVersion): string {
+  const payload = version.payload;
+  if (payload.kind === "reply") {
+    return `Approving will send this email to ${payload.recipient}.`;
+  }
+  if (payload.kind === "calendar") {
+    return "Approving will create this event on your connected calendar.";
+  }
+  if (payload.kind === "pdf_form") {
+    return `Approving will fill ${payload.document_name} and email it to ${payload.recipient}.`;
+  }
+  return "Approving will perform this action.";
+}
+
+function runConsequence(version: ProposalVersion): string {
+  const payload = version.payload;
+  if (payload.kind === "calendar") {
+    return "create this calendar event";
+  }
+  if (payload.kind === "reply" || payload.kind === "pdf_form") {
+    return `send this email to ${payload.recipient}`;
+  }
+  return "perform this action";
+}
+
 function toLocalInput(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -52,14 +93,20 @@ function fromLocalInput(value: string): string {
 
 export default function ProposalReview({
   version,
+  execution = null,
+  localMode = false,
   busyKey,
   conflict,
   onSave,
   onApprove,
   onReject,
   onReload,
+  onDispatch,
+  onRun,
+  readOnly = false,
 }: Props) {
   const [draft, setDraft] = useState<ProposalPayload>(version.payload);
+  const [confirmRun, setConfirmRun] = useState(false);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(version.payload);
 
@@ -102,7 +149,7 @@ export default function ProposalReview({
             <input
               type="text"
               value={(draft as ReplyPayload).subject}
-              disabled={!proposed}
+              disabled={!proposed || readOnly}
               onChange={(e) =>
                 patch({ subject: e.target.value } as Partial<ReplyPayload>)
               }
@@ -113,7 +160,7 @@ export default function ProposalReview({
             <textarea
               rows={5}
               value={(draft as ReplyPayload).body}
-              disabled={!proposed}
+              disabled={!proposed || readOnly}
               onChange={(e) =>
                 patch({ body: e.target.value } as Partial<ReplyPayload>)
               }
@@ -129,7 +176,7 @@ export default function ProposalReview({
             <input
               type="text"
               value={(draft as CalendarPayload).title}
-              disabled={!proposed}
+              disabled={!proposed || readOnly}
               onChange={(e) =>
                 patch({ title: e.target.value } as Partial<CalendarPayload>)
               }
@@ -141,7 +188,7 @@ export default function ProposalReview({
               <input
                 type="datetime-local"
                 value={toLocalInput((draft as CalendarPayload).starts_at)}
-                disabled={!proposed}
+                disabled={!proposed || readOnly}
                 onChange={(e) =>
                   patch({
                     starts_at: fromLocalInput(e.target.value),
@@ -154,7 +201,7 @@ export default function ProposalReview({
               <input
                 type="datetime-local"
                 value={toLocalInput((draft as CalendarPayload).ends_at)}
-                disabled={!proposed}
+                disabled={!proposed || readOnly}
                 onChange={(e) =>
                   patch({
                     ends_at: fromLocalInput(e.target.value),
@@ -169,8 +216,34 @@ export default function ProposalReview({
       {version.payload.kind === "pdf_form" && draft.kind === "pdf_form" && (
         <div className="proposal-fields">
           <p className="field-note">
+            The completed form is emailed to the school thread:{" "}
+            <strong>{version.payload.recipient}</strong>
+          </p>
+          <p className="field-note">
             Form: <strong>{version.payload.document_name}</strong>
           </p>
+          <label className="field">
+            <span className="field-label">Subject</span>
+            <input
+              type="text"
+              value={(draft as PdfFormPayload).subject}
+              disabled={!proposed || readOnly}
+              onChange={(e) =>
+                patch({ subject: e.target.value } as Partial<PdfFormPayload>)
+              }
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Body</span>
+            <textarea
+              rows={3}
+              value={(draft as PdfFormPayload).body}
+              disabled={!proposed || readOnly}
+              onChange={(e) =>
+                patch({ body: e.target.value } as Partial<PdfFormPayload>)
+              }
+            />
+          </label>
           {Object.entries((draft as PdfFormPayload).fields).map(
             ([name, value]) => (
               <label className="field" key={name}>
@@ -178,7 +251,7 @@ export default function ProposalReview({
                 <input
                   type="text"
                   value={value}
-                  disabled={!proposed}
+                  disabled={!proposed || readOnly}
                   onChange={(e) =>
                     patch({
                       fields: {
@@ -220,7 +293,7 @@ export default function ProposalReview({
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy || dirty}
+              disabled={busy || dirty || readOnly}
               aria-busy={busy && busyKey === `${version.id}:approve`}
               onClick={() => onApprove(version)}
             >
@@ -232,6 +305,9 @@ export default function ProposalReview({
             {dirty && (
               <p className="dirty-note">{DIRTY_NOTE[version.payload.kind]}</p>
             )}
+            <p className="field-note approve-consequence">
+              {approvalConsequence(version)}
+            </p>
           </>
         )}
         {proposed && escalation && (
@@ -245,7 +321,7 @@ export default function ProposalReview({
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={busy || !dirty}
+                disabled={busy || !dirty || readOnly}
                 aria-busy={busy && busyKey === `${version.id}:edit`}
                 onClick={save}
               >
@@ -258,7 +334,7 @@ export default function ProposalReview({
             <button
               type="button"
               className="btn btn-danger"
-              disabled={busy}
+              disabled={busy || readOnly}
               aria-busy={busy && busyKey === `${version.id}:reject`}
               onClick={() => onReject(version)}
             >
@@ -269,8 +345,72 @@ export default function ProposalReview({
             </button>
           </>
         )}
+        {version.status === "approved" && (
+          <div className="execution-panel">
+            <p
+              className={`proposal-done execution-${execution?.status ?? "pending_dispatch"}`}
+            >
+              {execution === null
+                ? "Approved — queued for delivery."
+                : EXECUTION_LABEL[execution.status]}
+            </p>
+            {execution?.safe_error && (
+              <p className="execution-error" role="alert">
+                {execution.safe_error}
+              </p>
+            )}
+            {localMode &&
+              !readOnly &&
+              execution !== null &&
+              (execution.status === "pending_dispatch" ||
+                execution.status === "queued") && (
+                <div className="execution-controls">
+                  {execution.status === "pending_dispatch" &&
+                    onDispatch !== undefined && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={busy}
+                        onClick={() => onDispatch()}
+                      >
+                        Dispatch
+                      </button>
+                    )}
+                  {onRun !== undefined && (
+                    <>
+                      <label className="field execution-confirm">
+                        <input
+                          type="checkbox"
+                          checked={confirmRun}
+                          onChange={(e) => setConfirmRun(e.target.checked)}
+                        />
+                        <span>
+                          I understand this will {runConsequence(version)} on the
+                          connected account.
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy || !confirmRun}
+                        aria-busy={
+                          busy && busyKey === `${version.id}:run`
+                        }
+                        onClick={() => {
+                          setConfirmRun(false);
+                          void onRun(execution);
+                        }}
+                      >
+                        Run approved action
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+          </div>
+        )}
         {version.status === "completed" && (
-          <p className="proposal-done">Completed — recorded in the demo outbox.</p>
+          <p className="proposal-done">Completed.</p>
         )}
         {version.status === "rejected" && (
           <p className="proposal-done">Rejected — this decision is final.</p>

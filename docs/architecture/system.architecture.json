@@ -1,0 +1,439 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "SchoolSift production architecture",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "caregiver-path",
+        "label": "Caregiver review path",
+        "focus": [
+          "caregivers",
+          "web",
+          "cognito",
+          "api",
+          "state"
+        ],
+        "note": "Cognito identity and household roles gate every read and write."
+      },
+      {
+        "id": "ingestion-path",
+        "label": "Inbox ingestion",
+        "focus": [
+          "gmail",
+          "outlook",
+          "webhooks",
+          "ingest_queue",
+          "ingest_worker",
+          "secrets",
+          "content"
+        ],
+        "note": "Webhooks only authenticate and enqueue; workers sync and encrypt content."
+      },
+      {
+        "id": "agent-path",
+        "label": "Agent and approval",
+        "focus": [
+          "ingest_worker",
+          "agentcore",
+          "bedrock",
+          "state",
+          "api",
+          "exec_queue",
+          "exec_worker"
+        ],
+        "note": "Model output is validated into Action Packets; nothing leaves without approval."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "gmail",
+      "type": "external",
+      "label": "Gmail",
+      "sublabel": "OAuth, Pub/Sub push",
+      "pos": [
+        840,
+        40
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "outlook",
+      "type": "external",
+      "label": "Microsoft Graph",
+      "sublabel": "OAuth, change notifications",
+      "pos": [
+        1110,
+        40
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "cognito",
+      "type": "security",
+      "label": "Amazon Cognito",
+      "sublabel": "ID tokens",
+      "pos": [
+        300,
+        165
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "content",
+      "type": "database",
+      "label": "Encrypted content",
+      "sublabel": "S3, 30-day expiry",
+      "pos": [
+        840,
+        540
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "secrets",
+      "type": "security",
+      "label": "Secrets Manager",
+      "sublabel": "per-inbox tokens, KMS",
+      "pos": [
+        1110,
+        540
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "exec_queue",
+      "type": "messagebus",
+      "label": "Execution queue",
+      "sublabel": "SQS FIFO, idempotent",
+      "pos": [
+        570,
+        165
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "exec_worker",
+      "type": "backend",
+      "label": "Execution worker",
+      "sublabel": "reply / event / PDF",
+      "pos": [
+        840,
+        165
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "webhooks",
+      "type": "backend",
+      "label": "Webhook receivers",
+      "sublabel": "verify, then enqueue",
+      "pos": [
+        1110,
+        165
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "ingest_queue",
+      "type": "messagebus",
+      "label": "Ingestion queue",
+      "sublabel": "SQS FIFO + DLQ",
+      "pos": [
+        1110,
+        290
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "ingest_worker",
+      "type": "backend",
+      "label": "Ingestion worker",
+      "sublabel": "delta sync, documents",
+      "pos": [
+        1110,
+        415
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "caregivers",
+      "type": "external",
+      "label": "Caregivers",
+      "sublabel": "owner / editor / viewer",
+      "pos": [
+        30,
+        290
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "SchoolSift Web",
+      "sublabel": "Next.js 15, PKCE",
+      "pos": [
+        300,
+        290
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "SchoolSift API",
+      "sublabel": "FastAPI, household-scoped",
+      "pos": [
+        570,
+        290
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "state",
+      "type": "database",
+      "label": "State store",
+      "sublabel": "DynamoDB / SQLite locally",
+      "pos": [
+        840,
+        290
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "agentcore",
+      "type": "cloud",
+      "label": "AgentCore Runtime",
+      "sublabel": "Strands, read-only tools",
+      "pos": [
+        840,
+        415
+      ],
+      "size": [
+        150,
+        62
+      ]
+    },
+    {
+      "id": "bedrock",
+      "type": "cloud",
+      "label": "Amazon Bedrock",
+      "sublabel": "structured output",
+      "pos": [
+        570,
+        415
+      ],
+      "size": [
+        150,
+        62
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "AWS account (deployment deferred; local SQLite + keyring fallback)",
+      "wraps": [
+        "cognito",
+        "content",
+        "secrets",
+        "exec_queue",
+        "exec_worker",
+        "webhooks",
+        "ingest_queue",
+        "ingest_worker",
+        "web",
+        "api",
+        "state",
+        "agentcore",
+        "bedrock"
+      ],
+      "pad": 22
+    },
+    {
+      "kind": "security-group",
+      "label": "provider side effects only after approval",
+      "wraps": [
+        "exec_queue",
+        "exec_worker"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "from": "caregivers",
+      "to": "web",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "web",
+      "to": "cognito",
+      "label": "PKCE",
+      "variant": "security"
+    },
+    {
+      "from": "web",
+      "to": "api",
+      "label": "ID token",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api",
+      "to": "state",
+      "label": "scoped I/O"
+    },
+    {
+      "from": "api",
+      "to": "exec_queue",
+      "label": "approval \u2192 command",
+      "variant": "emphasis"
+    },
+    {
+      "from": "exec_queue",
+      "to": "exec_worker",
+      "variant": "emphasis"
+    },
+    {
+      "from": "exec_worker",
+      "to": "state",
+      "label": "delivery outcome",
+      "labelDy": 24
+    },
+    {
+      "from": "exec_worker",
+      "to": "gmail",
+      "label": "send / create event",
+      "variant": "dashed",
+      "labelDy": -40
+    },
+    {
+      "from": "gmail",
+      "to": "webhooks",
+      "label": "OIDC push",
+      "variant": "security"
+    },
+    {
+      "from": "outlook",
+      "to": "webhooks",
+      "label": "HMAC state",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "from": "webhooks",
+      "to": "ingest_queue",
+      "label": "enqueue",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "from": "ingest_queue",
+      "to": "ingest_worker",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ingest_worker",
+      "to": "secrets",
+      "label": "refresh token",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "from": "ingest_worker",
+      "to": "content",
+      "label": "encrypted bodies + files"
+    },
+    {
+      "from": "ingest_worker",
+      "to": "agentcore",
+      "label": "normalized message",
+      "variant": "emphasis"
+    },
+    {
+      "from": "agentcore",
+      "to": "bedrock",
+      "label": "InvokeModel"
+    },
+    {
+      "from": "agentcore",
+      "to": "state",
+      "label": "validated Action Packet",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Trust boundaries",
+      "items": [
+        "Cognito identity and household role on every request",
+        "Webhooks verify OIDC / client state, then only enqueue",
+        "Refresh tokens never leave Secrets Manager or the keyring"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Data handling",
+      "items": [
+        "Bodies and attachments encrypted, referenced by opaque IDs",
+        "Only confirmed school senders are read in full",
+        "Raw content expires after 30 days"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Action safety",
+      "items": [
+        "Model output is validated before it becomes an Action Packet",
+        "A caregiver approves each reply, event, or PDF before execution",
+        "Payments and binding signatures are never automated"
+      ]
+    }
+  ]
+}

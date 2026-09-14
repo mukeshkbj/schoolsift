@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "From school email to approved action",
+    "viewBox": [
+      1080,
+      840
+    ],
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "views": [
+      {
+        "id": "ingest",
+        "label": "Notify and sync",
+        "focus": [
+          "provider",
+          "webhook",
+          "queue",
+          "worker",
+          "store"
+        ],
+        "note": "The webhook only verifies and enqueues; the worker syncs and encrypts."
+      },
+      {
+        "id": "analyze",
+        "label": "Analyze into an Action Packet",
+        "focus": [
+          "worker",
+          "agent",
+          "store"
+        ],
+        "note": "Untrusted email text is analyzed with read-only tools; output is validated before it is saved."
+      },
+      {
+        "id": "approve",
+        "label": "Review, approve, execute",
+        "focus": [
+          "caregiver",
+          "api",
+          "store",
+          "execqueue",
+          "worker",
+          "provider"
+        ],
+        "note": "Only an approved, hash-verified payload reaches the provider."
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "provider",
+      "type": "external",
+      "label": "Gmail / Graph",
+      "sublabel": "school inbox"
+    },
+    {
+      "id": "webhook",
+      "type": "security",
+      "label": "Webhook",
+      "sublabel": "verify, enqueue"
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "Ingest queue",
+      "sublabel": "SQS FIFO"
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sublabel": "sync / execute"
+    },
+    {
+      "id": "agent",
+      "type": "cloud",
+      "label": "Strands agent",
+      "sublabel": "Bedrock model"
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Store",
+      "sublabel": "encrypted"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API",
+      "sublabel": "household"
+    },
+    {
+      "id": "caregiver",
+      "type": "external",
+      "label": "Caregiver",
+      "sublabel": "editor"
+    },
+    {
+      "id": "execqueue",
+      "type": "messagebus",
+      "label": "Exec queue",
+      "sublabel": "idempotent"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 310,
+      "label": "Notify and sync"
+    },
+    {
+      "from": 322,
+      "to": 472,
+      "label": "Analyze"
+    },
+    {
+      "from": 484,
+      "to": 740,
+      "label": "Review, approve, execute"
+    }
+  ],
+  "messages": [
+    {
+      "from": "provider",
+      "to": "webhook",
+      "y": 176,
+      "label": "change notification",
+      "variant": "security"
+    },
+    {
+      "from": "webhook",
+      "to": "queue",
+      "y": 212,
+      "label": "enqueue mail_changed",
+      "variant": "emphasis"
+    },
+    {
+      "from": "queue",
+      "to": "worker",
+      "y": 248,
+      "label": "deliver",
+      "variant": "emphasis"
+    },
+    {
+      "from": "worker",
+      "to": "provider",
+      "y": 284,
+      "label": "delta sync (confirmed senders only)",
+      "variant": "default"
+    },
+    {
+      "from": "worker",
+      "to": "store",
+      "y": 338,
+      "label": "encrypt body + attachments",
+      "variant": "emphasis"
+    },
+    {
+      "from": "worker",
+      "to": "agent",
+      "y": 374,
+      "label": "analyze normalized message",
+      "variant": "emphasis"
+    },
+    {
+      "from": "agent",
+      "to": "worker",
+      "y": 410,
+      "label": "structured analysis",
+      "variant": "return"
+    },
+    {
+      "from": "worker",
+      "to": "store",
+      "y": 446,
+      "label": "validated Action Packet",
+      "variant": "emphasis"
+    },
+    {
+      "from": "caregiver",
+      "to": "api",
+      "y": 500,
+      "label": "edit / approve (version + hash)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api",
+      "to": "store",
+      "y": 536,
+      "label": "approve + create execution",
+      "variant": "default"
+    },
+    {
+      "from": "api",
+      "to": "execqueue",
+      "y": 572,
+      "label": "execution command",
+      "variant": "emphasis"
+    },
+    {
+      "from": "execqueue",
+      "to": "worker",
+      "y": 608,
+      "label": "claim once",
+      "variant": "emphasis"
+    },
+    {
+      "from": "worker",
+      "to": "provider",
+      "y": 644,
+      "label": "send reply / create event",
+      "variant": "security"
+    },
+    {
+      "from": "provider",
+      "to": "worker",
+      "y": 680,
+      "label": "id or timeout",
+      "variant": "return"
+    },
+    {
+      "from": "worker",
+      "to": "store",
+      "y": 716,
+      "label": "completed / failed / delivery uncertain",
+      "variant": "default"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "webhook",
+      "from": 170,
+      "to": 220,
+      "type": "security"
+    },
+    {
+      "participant": "worker",
+      "from": 242,
+      "to": 454,
+      "type": "backend"
+    },
+    {
+      "participant": "agent",
+      "from": 368,
+      "to": 418,
+      "type": "cloud"
+    },
+    {
+      "participant": "api",
+      "from": 494,
+      "to": 580,
+      "type": "backend"
+    },
+    {
+      "participant": "worker",
+      "from": 602,
+      "to": 724,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Fast, safe ingestion",
+      "items": [
+        "Webhook work is verify, dedupe, enqueue \u2014 nothing else",
+        "Full content is read only for confirmed school senders",
+        "Raw content is encrypted before anything else happens"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Bounded analysis",
+      "items": [
+        "The agent sees normalized text and read-only household tools",
+        "Output must pass proposal policy before it is stored",
+        "Payment and signature requests become escalations, never actions"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Approval gate",
+      "items": [
+        "Approval binds to a proposal version and payload hash",
+        "One execution per approved version; claimed once by a worker",
+        "Ambiguous provider outcomes stay visible as delivery uncertain"
+      ]
+    }
+  ]
+}

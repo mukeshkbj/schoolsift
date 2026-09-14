@@ -26,3 +26,9 @@ test-results/
 # OS/editor
 .DS_Store
 *.swp
+
+# Local database
+.schoolsift/
+
+# CDK synthesis output
+infra/cdk.out/

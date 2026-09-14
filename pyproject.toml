@@ -9,14 +9,23 @@ dependencies = [
     "uvicorn>=0.30,<0.36",
     "pypdf>=4,<6",
     "strands-agents==1.54.0",
+    "httpx>=0.28.1",
+    "keyring>=25.7.0",
+    "google-auth==2.57.1",
+    "cryptography>=44,<47",
+    "defusedxml>=0.7.1",
+    "requests>=2.34.2",
+    "bedrock-agentcore==1.22.0",
+    "boto3==1.43.89",
+    "PyJWT==2.13.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8,<9",
-    "httpx>=0.27,<0.29",
     "ruff>=0.6,<0.14",
     "mypy>=1.11,<1.19",
+    "types-defusedxml>=0.7.0.20260504",
 ]
 
 [build-system]
@@ -59,3 +68,4 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "backend/tests/**" = ["S101"]
+"backend/src/schoolsift/sqlite_store.py" = ["S608"]

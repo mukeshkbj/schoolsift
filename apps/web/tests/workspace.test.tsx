@@ -1,58 +1,71 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import DemoWorkspace from "../components/DemoWorkspace";
-import { demoState } from "./helpers";
+import SchoolSiftApp from "../components/SchoolSiftApp";
+import {
+  bootstrapAgentMissing,
+  bootstrapAwaitingAgent,
+  bootstrapProcessed,
+  bootstrapWithFailedMessage,
+  packet,
+} from "./helpers";
 
-vi.mock("../lib/api", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../lib/api")>();
-  const { demoState: state } = await import("./helpers");
+vi.mock("../lib/api", async () => {
+  const { child, household } = await import("./helpers");
   return {
-    ...mod,
-    getDemo: vi.fn().mockResolvedValue(state),
-    processInbox: vi.fn().mockResolvedValue({ packets: state.packets }),
-    approveProposal: vi
-      .fn()
-      .mockResolvedValue({ version: {}, outcome: { kind: "demo_reply" } }),
+    getBootstrap: vi.fn(),
+    createHousehold: vi.fn().mockResolvedValue(household),
+    addChild: vi.fn().mockResolvedValue(child),
+    startConnect: vi.fn(),
+    disconnectConnection: vi.fn(),
+    syncConnection: vi.fn(),
+    enableNotifications: vi.fn(),
+    confirmSource: vi.fn(),
+    rejectSource: vi.fn(),
+    processMessage: vi.fn(),
+    editProposal: vi.fn(),
+    approveProposal: vi.fn(),
+    rejectProposal: vi.fn(),
   };
 });
 
-describe("DemoWorkspace", () => {
-  it("shows the Demo data label and one primary process action", () => {
-    render(<DemoWorkspace initialState={{ ...demoState, packets: [] }} />);
-    expect(screen.getByText("Demo data")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Process demo inbox" }),
-    ).toBeInTheDocument();
-  });
+const api = () => import("../lib/api");
 
-  it("keeps the process label stable and marks the button busy", async () => {
-    const api = await import("../lib/api");
-    vi.mocked(api.processInbox).mockReturnValueOnce(new Promise(() => {}));
-    render(<DemoWorkspace initialState={{ ...demoState, packets: [] }} />);
+describe("SchoolSiftApp message processing", () => {
+  it("processes an awaiting message and shows the new packet", async () => {
+    const { getBootstrap, processMessage } = await api();
+    vi.mocked(getBootstrap).mockResolvedValue(bootstrapProcessed);
+    vi.mocked(processMessage).mockResolvedValue(packet);
+    render(<SchoolSiftApp initialBootstrap={bootstrapAwaitingAgent} />);
     await userEvent.click(
-      screen.getByRole("button", { name: "Process demo inbox" }),
+      screen.getByRole("button", { name: "Process message" }),
     );
-    const btn = screen.getByRole("button", { name: "Process demo inbox" });
-    expect(btn).toHaveTextContent("Process demo inbox");
-    expect(btn).toHaveAttribute("aria-busy", "true");
-    expect(btn).toBeDisabled();
+    await waitFor(() =>
+      expect(processMessage).toHaveBeenCalledWith("msg-2"),
+    );
+    await waitFor(() => expect(getBootstrap).toHaveBeenCalled());
+    expect(await screen.findByText(packet.summary)).toBeInTheDocument();
   });
 
-  it("shows the empty state before processing", () => {
-    render(<DemoWorkspace initialState={{ ...demoState, packets: [] }} />);
-    expect(screen.getByText(/Six synthetic school messages/)).toBeInTheDocument();
-  });
-
-  it("lists inbox messages and selects a packet", async () => {
-    render(<DemoWorkspace initialState={demoState} />);
-    await screen.findByRole("button", { name: /field trip/i });
-    await userEvent.click(
-      screen.getByRole("button", { name: /field trip/i }),
-    );
-    expect(screen.getByText("For Maya")).toBeInTheDocument();
+  it("shows agent configuration guidance when the agent is unavailable", () => {
+    render(<SchoolSiftApp initialBootstrap={bootstrapAgentMissing} />);
     expect(
-      screen.getByRole("button", { name: "Send demo reply" }),
+      screen.getByText(/Waiting for agent configuration/),
     ).toBeInTheDocument();
+    expect(screen.getByText("SCHOOLSIFT_AWS_REGION")).toBeInTheDocument();
+    expect(screen.getByText("SCHOOLSIFT_BEDROCK_MODEL_ID")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Process message" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the manual review reason for failed messages", () => {
+    render(<SchoolSiftApp initialBootstrap={bootstrapWithFailedMessage} />);
+    expect(
+      screen.getByText(/exceeds the 25 MB limit/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Process message" }),
+    ).not.toBeInTheDocument();
   });
 });

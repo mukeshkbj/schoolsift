@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Action Packet lifecycle",
+    "viewBox": [
+      1080,
+      600
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "review-rail",
+        "label": "Review rail",
+        "focus": [
+          "analyzed",
+          "proposed",
+          "reviewing",
+          "executing",
+          "completed"
+        ],
+        "note": "A proposal moves from model output to a delivered action only through a caregiver."
+      },
+      {
+        "id": "human-gates",
+        "label": "Human gates",
+        "focus": [
+          "reviewing",
+          "escalated",
+          "rejected"
+        ],
+        "note": "Payment, signature, and unknown-sender cases are shown but can never be approved."
+      },
+      {
+        "id": "delivery-outcomes",
+        "label": "Delivery outcomes",
+        "focus": [
+          "executing",
+          "completed",
+          "uncertain",
+          "failed"
+        ],
+        "note": "Ambiguous provider results are surfaced, never silently retried."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Proposal and execution"
+    },
+    {
+      "id": "waiting",
+      "label": "Waiting on a person"
+    },
+    {
+      "id": "terminal",
+      "label": "Terminal exits"
+    }
+  ],
+  "states": [
+    {
+      "id": "analyzed",
+      "type": "start",
+      "label": "Analyzed",
+      "sublabel": "output validated",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "policy checked"
+    },
+    {
+      "id": "proposed",
+      "type": "active",
+      "label": "Proposed",
+      "sublabel": "visible to household",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "v1"
+    },
+    {
+      "id": "reviewing",
+      "type": "decision",
+      "label": "In review",
+      "sublabel": "edit = new version",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "editor"
+    },
+    {
+      "id": "executing",
+      "type": "active",
+      "label": "Executing",
+      "sublabel": "hash-bound, claimed once",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "idempotent"
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "Completed",
+      "sublabel": "provider id kept",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "tag": "audited"
+    },
+    {
+      "id": "escalated",
+      "type": "waiting",
+      "label": "Escalated",
+      "sublabel": "payment / signature",
+      "lane": "waiting",
+      "col": 0,
+      "tag": "not approvable",
+      "yOffset": -25
+    },
+    {
+      "id": "uncertain",
+      "type": "waiting",
+      "label": "Delivery uncertain",
+      "sublabel": "check sent items",
+      "lane": "waiting",
+      "col": 1,
+      "tag": "no retry",
+      "yOffset": -25
+    },
+    {
+      "id": "rejected",
+      "type": "failure",
+      "label": "Rejected",
+      "sublabel": "caregiver declined",
+      "lane": "terminal",
+      "col": 0,
+      "tag": "terminal",
+      "yOffset": -50
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "manual review",
+      "lane": "terminal",
+      "col": 1,
+      "tag": "terminal",
+      "yOffset": -50
+    }
+  ],
+  "transitions": [
+    {
+      "from": "reviewing",
+      "to": "escalated",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "escalated",
+      "to": "rejected",
+      "variant": "dashed",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "executing",
+      "to": "uncertain",
+      "variant": "dashed",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "uncertain",
+      "to": "failed",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Review rail",
+      "items": [
+        "Every edit is a new immutable version",
+        "Approval binds to version + payload hash",
+        "Stale approvals are refused with 409"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Human gates",
+      "items": [
+        "Escalations can never be approved",
+        "Editors reject; viewers only read",
+        "Replies go only to the original sender"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Delivery outcomes",
+      "items": [
+        "One execution per approved version",
+        "Post-send timeouts: delivery uncertain",
+        "Failures land in manual review"
+      ]
+    }
+  ]
+}

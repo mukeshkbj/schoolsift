@@ -1,0 +1,6 @@
+{
+  "app": "node --experimental-strip-types bin/app.ts",
+  "context": {
+    "@aws-cdk/core:enablePartitionLiterals": true
+  }
+}

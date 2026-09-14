@@ -17,7 +17,7 @@ describe("ProposalReview", () => {
   it("names the approve button with its consequence", () => {
     render(<ProposalReview {...baseProps} version={replyVersion} />);
     expect(
-      screen.getByRole("button", { name: "Send demo reply" }),
+      screen.getByRole("button", { name: "Approve reply" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /confirm|submit/i })).toBeNull();
   });
@@ -33,7 +33,7 @@ describe("ProposalReview", () => {
   it("disables approve while edits are unsaved and says why", async () => {
     render(<ProposalReview {...baseProps} version={replyVersion} />);
     await userEvent.type(screen.getByLabelText("Body"), " Edited.");
-    expect(screen.getByRole("button", { name: "Send demo reply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Approve reply" })).toBeDisabled();
     expect(screen.getByText("Save your edits before sending.")).toBeVisible();
   });
 
@@ -45,10 +45,10 @@ describe("ProposalReview", () => {
         busyKey={`${replyVersion.id}:approve`}
       />,
     );
-    const approve = screen.getByRole("button", { name: "Send demo reply" });
+    const approve = screen.getByRole("button", { name: "Approve reply" });
     expect(approve).toBeDisabled();
     expect(approve).toHaveAttribute("aria-busy", "true");
-    expect(approve).toHaveTextContent("Send demo reply");
+    expect(approve).toHaveTextContent("Approve reply");
   });
 
   it("never offers approval or save controls for escalations", () => {
@@ -75,14 +75,135 @@ describe("ProposalReview", () => {
     expect(screen.getByRole("button", { name: "Reload latest" })).toBeInTheDocument();
   });
 
-  it("shows completed state", () => {
+  it("shows the approved state", () => {
     render(
       <ProposalReview
         {...baseProps}
-        version={{ ...replyVersion, status: "completed" }}
+        version={{ ...replyVersion, status: "approved" }}
       />,
     );
-    expect(screen.getByText(/recorded in the demo outbox/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send demo reply" })).toBeNull();
+    expect(screen.getByText(/queued for delivery/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve reply" })).toBeNull();
+  });
+});
+
+describe("ProposalReview execution", () => {
+  const approvedReply = { ...replyVersion, status: "approved" as const };
+
+  const execution = (status: string, safe_error: string | null = null) => ({
+    id: "exec-1",
+    household_id: "hh-1",
+    proposal_id: replyVersion.id,
+    proposal_version: 1,
+    connection_id: "conn-1",
+    idempotency_key: "idem-1",
+    status: status as
+      | "pending_dispatch"
+      | "queued"
+      | "executing"
+      | "completed"
+      | "failed"
+      | "delivery_uncertain",
+    attempts: 1,
+    provider_operation_id: null,
+    safe_error,
+    created_at: "2026-09-13T00:00:00Z",
+    updated_at: "2026-09-13T00:00:00Z",
+  });
+
+  it("states that approving sends the email", () => {
+    render(<ProposalReview {...baseProps} version={replyVersion} />);
+    expect(
+      screen.getByText(/Approving will send this email to/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows each execution status distinctly", () => {
+    const labels: Record<string, RegExp> = {
+      pending_dispatch: /Pending — approved but not yet dispatched/,
+      queued: /Queued — ready to run/,
+      executing: /Executing against the connected account/,
+      completed: /Completed — the provider accepted/,
+      failed: /Failed — the action did not complete/,
+      delivery_uncertain: /Delivery uncertain/,
+    };
+    for (const [status, label] of Object.entries(labels)) {
+      const { unmount } = render(
+        <ProposalReview
+          {...baseProps}
+          version={approvedReply}
+          execution={execution(status)}
+        />,
+      );
+      expect(screen.getByText(label)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("surfaces safe_error for failed executions", () => {
+    render(
+      <ProposalReview
+        {...baseProps}
+        version={approvedReply}
+        execution={execution("failed", "Provider rejected the request.")}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Provider rejected the request.",
+    );
+  });
+
+  it("local mode offers dispatch for pending executions", async () => {
+    const onDispatch = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ProposalReview
+        {...baseProps}
+        version={approvedReply}
+        execution={execution("pending_dispatch")}
+        localMode
+        onDispatch={onDispatch}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Dispatch" }));
+    expect(onDispatch).toHaveBeenCalledOnce();
+  });
+
+  it("run requires the confirmation checkbox and names the consequence", async () => {
+    const onRun = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ProposalReview
+        {...baseProps}
+        version={approvedReply}
+        execution={execution("queued")}
+        localMode
+        onRun={onRun}
+      />,
+    );
+    const run = screen.getByRole("button", { name: "Run approved action" });
+    expect(run).toBeDisabled();
+    expect(
+      screen.getByText(/send this email to office@maplegrove.example/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox"));
+    expect(run).toBeEnabled();
+    await userEvent.click(run);
+    expect(onRun).toHaveBeenCalledOnce();
+  });
+
+  it("hides dispatch and run for viewers and non-local mode", () => {
+    render(
+      <ProposalReview
+        {...baseProps}
+        version={approvedReply}
+        execution={execution("queued")}
+        readOnly
+        localMode
+        onRun={vi.fn()}
+        onDispatch={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Run approved action" }),
+    ).toBeNull();
   });
 });

@@ -1014,3 +1014,111 @@ def test_executions_viewer_read_only(store):
         ).status_code
         == 403
     )
+
+
+def test_process_model_access_returns_503_shape(settings, store):
+    from schoolsift.errors import ModelAccessError
+
+    class FailingAnalyzer:
+        def analyze(self, household_id, message_id):
+            raise ModelAccessError(
+                "Bedrock model access is not set up for this AWS account"
+                " (Anthropic use case form)."
+            )
+
+    c = TestClient(
+        create_app(
+            settings=settings,
+            store=store,
+            providers={},
+            vault=FakeVault(),
+            analyzer=FailingAnalyzer(),
+        )
+    )
+    h = store.create_household(name="H", timezone="UTC")
+    record = _seed_awaiting_message(store, h.id)
+
+    r = c.post(f"/v1/messages/{record.id}/process")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["error"]["code"] == "MODEL_UNAVAILABLE"
+    assert "use case form" in body["error"]["message"]
+
+    # the message stays retryable — not marked failed
+    msgs = c.get("/v1/messages").json()
+    assert msgs[0]["status"] == "awaiting_agent"
+    assert msgs[0]["manual_review_reason"] is None
+
+
+def test_message_retry_route(settings, store):
+    c = TestClient(
+        create_app(settings=settings, store=store, providers={}, vault=FakeVault())
+    )
+    h = store.create_household(name="H", timezone="UTC")
+    record = _seed_awaiting_message(store, h.id)
+
+    # not failed yet -> 409
+    r = c.post(f"/v1/messages/{record.id}/retry")
+    assert r.status_code == 409
+
+    store.set_message_status(
+        h.id,
+        record.connection_id,
+        record.provider_message_id,
+        "failed",
+        reason="needs review",
+    )
+    r = c.post(f"/v1/messages/{record.id}/retry")
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_agent"
+    assert r.json()["manual_review_reason"] is None
+
+    assert c.post("/v1/messages/missing/retry").status_code == 404
+
+
+def test_message_retry_viewer_forbidden(store):
+    import sqlite3
+    from datetime import UTC, datetime
+
+    h = store.create_household_for_owner(
+        Principal(user_id="owner-1", email="o@x.com"), name="H", timezone="UTC"
+    )
+    con = sqlite3.connect(store.path)
+    try:
+        con.execute(
+            "INSERT INTO memberships (household_id, user_id, email, role,"
+            " created_at) VALUES (?, 'viewer-1', 'v@x.com', 'viewer', ?)",
+            (h.id, datetime.now(UTC).isoformat()),
+        )
+        con.commit()
+    finally:
+        con.close()
+    record = _seed_awaiting_message(store, h.id)
+    store.set_message_status(
+        h.id,
+        record.connection_id,
+        record.provider_message_id,
+        "failed",
+        reason="x",
+    )
+    settings = Settings(
+        environment="local",
+        auth_mode="cognito",
+        cognito_issuer="https://issuer.example",
+        cognito_audience="aud",
+        database_path=store.path,
+        allowed_origins=("http://localhost:3210",),
+    )
+    viewer = TestClient(
+        create_app(
+            settings=settings,
+            store=store,
+            providers={},
+            vault=FakeVault(),
+            token_verifier=FakeVerifier(Principal(user_id="viewer-1", email="v@x.com")),
+        )
+    )
+    auth = {"Authorization": "Bearer t", "X-SchoolSift-Household": h.id}
+    assert (
+        viewer.post(f"/v1/messages/{record.id}/retry", headers=auth).status_code == 403
+    )

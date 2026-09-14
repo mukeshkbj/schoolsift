@@ -13,6 +13,7 @@ from .domain import (
 from .errors import (
     AgentError,
     ConflictError,
+    ModelAccessError,
     SchoolSiftError,
     UnsafeAgentOutputError,
     UnsafeProposalError,
@@ -88,6 +89,10 @@ def process_message(
     try:
         draft = analyzer.analyze(household_id, message_id)
         _validate_draft(record, docs, draft)
+    except ModelAccessError:
+        # Infrastructure failure, not a message defect — leave the message
+        # awaiting_agent so a later retry can process it.
+        raise
     except SchoolSiftError:
         _mark_failed(store, household_id, record)
         raise

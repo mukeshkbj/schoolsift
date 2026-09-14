@@ -7,6 +7,8 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+import botocore.exceptions  # type: ignore[import-untyped]
+
 from .documents import (
     MAX_DOCUMENT_BYTES,
     MAX_DOCUMENTS,
@@ -14,7 +16,7 @@ from .documents import (
     MAX_IMAGES,
 )
 from .domain import ActionPacketDraft
-from .errors import UnsupportedDocumentError
+from .errors import ModelAccessError, UnsupportedDocumentError
 from .models import (
     CalendarRecord,
     DocumentContent,
@@ -196,6 +198,64 @@ def prepare_agent_content(
     return blocks
 
 
+def _model_access_error(exc: BaseException) -> ModelAccessError:
+    """Map a Bedrock/botocore failure to a sanitized operator-facing error.
+
+    Never carries the raw AWS message text — it can echo request content.
+    """
+    if isinstance(exc, botocore.exceptions.NoCredentialsError):
+        return ModelAccessError(
+            "AWS credentials are missing; Bedrock cannot be called."
+        )
+    if isinstance(exc, botocore.exceptions.EndpointConnectionError):
+        return ModelAccessError(
+            "Bedrock is unreachable; check the AWS region and network."
+        )
+    code = ""
+    detail = ""
+    if isinstance(exc, botocore.exceptions.ClientError):
+        err = exc.response.get("Error", {})
+        code = str(err.get("Code", ""))
+        detail = str(err.get("Message", ""))
+    if code == "ResourceNotFoundException" and "use case" in detail:
+        return ModelAccessError(
+            "Bedrock model access is not set up for this AWS account"
+            " (Anthropic use case form)."
+        )
+    if code == "AccessDeniedException":
+        return ModelAccessError(
+            "This AWS account cannot invoke the Bedrock model yet (access denied)."
+        )
+    if code == "ValidationException" and "inference profile" in detail:
+        return ModelAccessError(
+            "The configured Bedrock model id needs a cross-region inference profile id."
+        )
+    if code in (
+        "ThrottlingException",
+        "ServiceUnavailableException",
+        "ModelNotReadyException",
+    ):
+        return ModelAccessError("Bedrock is busy; try again in a moment.")
+    if code:
+        return ModelAccessError(f"Bedrock request failed ({code}).")
+    return ModelAccessError("Bedrock request failed.")
+
+
+def _bedrock_errors() -> tuple[type[BaseException], ...]:
+    errors: list[type[BaseException]] = [
+        botocore.exceptions.ClientError,
+        botocore.exceptions.NoCredentialsError,
+        botocore.exceptions.EndpointConnectionError,
+    ]
+    try:
+        from strands.types.exceptions import ModelThrottledException
+    except ImportError:
+        pass
+    else:
+        errors.append(ModelThrottledException)
+    return tuple(errors)
+
+
 class MessageAnalyzer(Protocol):
     def analyze(self, household_id: str, message_id: str) -> ActionPacketDraft: ...
 
@@ -223,7 +283,10 @@ class StrandsMessageAnalyzer:
 
     def analyze(self, household_id: str, message_id: str) -> ActionPacketDraft:
         blocks = prepare_agent_content(self._ds, household_id, message_id)
-        draft = self._build().structured_output(
-            ActionPacketDraft, cast("list[ContentBlock]", blocks)
-        )
+        try:
+            draft = self._build().structured_output(
+                ActionPacketDraft, cast("list[ContentBlock]", blocks)
+            )
+        except _bedrock_errors() as e:
+            raise _model_access_error(e) from e
         return ActionPacketDraft.model_validate(draft)

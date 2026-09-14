@@ -22,6 +22,7 @@ import {
   enableNotifications,
   getBootstrap,
   processMessage,
+  retryMessage,
   runExecution,
   rejectProposal,
   rejectSource,
@@ -88,9 +89,7 @@ export default function SchoolSiftApp({
       setPageError(null);
     } catch (e) {
       setPageError(
-        e instanceof ApiError
-          ? e.message
-          : "Could not reach the SchoolSift API on :8000.",
+        e instanceof ApiError ? e.message : "Something went wrong.",
       );
     } finally {
       setLoading(false);
@@ -209,6 +208,9 @@ export default function SchoolSiftApp({
       }
     }, "bulk-sources");
 
+  const onRetry = (messageId: string) =>
+    run(() => retryMessage(messageId), `retry:${messageId}`);
+
   const onProcess = (messageId: string) =>
     run(async () => {
       const packet = await processMessage(messageId);
@@ -299,6 +301,7 @@ export default function SchoolSiftApp({
   const awaitingCount = messages.filter(
     (m) => m.status === "awaiting_agent",
   ).length;
+  const failedMessages = messages.filter((m) => m.status === "failed");
   const selected = packets.find((p) => p.id === selectedId);
   const activeMembership =
     boot?.memberships.find(
@@ -605,6 +608,40 @@ export default function SchoolSiftApp({
                       );
                     })}
                   </ol>
+                )}
+                {failedMessages.length > 0 && (
+                  <div className="rail-failed">
+                    <h3 className="rail-heading">Couldn&apos;t process</h3>
+                    <ul className="failed-list">
+                      {failedMessages.map((m) => (
+                        <li key={m.id} className="failed-item">
+                          <span className="rail-subject">{m.subject}</span>
+                          {m.manual_review_reason !== null && (
+                            <span className="rail-meta">
+                              {m.manual_review_reason}
+                            </span>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              disabled={busyKey === `retry:${m.id}`}
+                              aria-busy={busyKey === `retry:${m.id}`}
+                              onClick={() => void onRetry(m.id)}
+                            >
+                              Retry analysis
+                              {busyKey === `retry:${m.id}` && (
+                                <span
+                                  className="btn-busy"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </nav>
 

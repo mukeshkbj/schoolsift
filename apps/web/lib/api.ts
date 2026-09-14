@@ -14,6 +14,7 @@ import {
   invitationCreatedSchema,
   invitationSchema,
   membershipSchema,
+  messageSchema,
   oauthStartSchema,
   proposalPayloadSchema,
   proposalVersionSchema,
@@ -42,10 +43,19 @@ async function request<S extends z.ZodType>(
   schema: S,
   init?: RequestInit,
 ): Promise<z.infer<S>> {
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: requestHeaders(),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      ...init,
+      headers: requestHeaders(),
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK_ERROR",
+      "Could not reach the SchoolSift API on :8000.",
+    );
+  }
   const body: unknown =
     res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
@@ -98,6 +108,9 @@ export const confirmSource = (sourceId: string) =>
 
 export const rejectSource = (sourceId: string) =>
   request(`/v1/sources/${sourceId}/reject`, schoolSourceSchema, post());
+
+export const retryMessage = (messageId: string) =>
+  request(`/v1/messages/${messageId}/retry`, messageSchema, post());
 
 export const processMessage = (messageId: string) =>
   request(`/v1/messages/${messageId}/process`, actionPacketSchema, post());

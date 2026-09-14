@@ -413,3 +413,21 @@ def test_concurrent_processing_persists_single_packet(env):
     assert results[0].id == results[1].id
     assert len(store.list_packets(h.id)) == 1
     assert store.get_message_record(h.id, record.id).status == "processed"
+
+
+def test_model_access_error_leaves_message_awaiting(env):
+    from schoolsift.errors import ModelAccessError
+
+    store, h, _, record = env
+    with pytest.raises(ModelAccessError):
+        process_message(
+            h.id,
+            record.id,
+            store=store,
+            analyzer=FakeAnalyzer(
+                fail=ModelAccessError("Bedrock is busy; try again in a moment.")
+            ),
+        )
+    after = store.get_message_record(h.id, record.id)
+    assert after.status == "awaiting_agent"
+    assert after.manual_review_reason is None

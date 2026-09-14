@@ -413,6 +413,29 @@ input:disabled, textarea:disabled {
   color: var(--ink-soft);
 }
 
+.rail-failed {
+  margin-top: 1.25rem;
+}
+
+.failed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.failed-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-start;
+  padding: 0.6rem 0.75rem;
+  border: 1.5px dashed var(--ruled);
+  border-radius: var(--radius);
+}
+
 .packet {
   background: var(--card);
   border: 1.5px solid var(--ink);

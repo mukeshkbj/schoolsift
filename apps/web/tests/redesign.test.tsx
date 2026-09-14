@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import SchoolSiftApp from "../components/SchoolSiftApp";
 import {
+  bootstrapAwaitingAgent,
   bootstrapConnected,
   bootstrapReady,
+  bootstrapWithFailedMessage,
   household,
 } from "./helpers";
+import { ApiError } from "../lib/errors";
 import type { SchoolSource } from "../lib/contracts";
 
 vi.mock("../lib/api", async () => {
@@ -22,6 +25,7 @@ vi.mock("../lib/api", async () => {
     confirmSource: vi.fn(),
     rejectSource: vi.fn(),
     processMessage: vi.fn(),
+    retryMessage: vi.fn(),
     editProposal: vi.fn(),
     approveProposal: vi.fn(),
     rejectProposal: vi.fn(),
@@ -258,6 +262,52 @@ describe("senders view", () => {
     expect(
       within(tiny).queryByRole("button", { name: /Show .* senders/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("failed messages and model errors", () => {
+  it("shows the server's 503 MODEL_UNAVAILABLE message verbatim", async () => {
+    const { processMessage } = await api();
+    vi.mocked(processMessage).mockRejectedValue(
+      new ApiError(
+        503,
+        "MODEL_UNAVAILABLE",
+        "Bedrock model access is not set up for this AWS account" +
+          " (Anthropic use case form).",
+      ),
+    );
+    render(<SchoolSiftApp initialBootstrap={bootstrapAwaitingAgent} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Process messages" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Bedrock model access is not set up for this AWS account" +
+        " (Anthropic use case form).",
+    );
+    expect(screen.queryByText(/Could not reach/)).not.toBeInTheDocument();
+  });
+
+  it("retries a failed message via the Retry analysis control", async () => {
+    const { retryMessage, getBootstrap } = await api();
+    vi.mocked(retryMessage).mockResolvedValue(
+      bootstrapWithFailedMessage.messages[0],
+    );
+    vi.mocked(getBootstrap).mockResolvedValue(bootstrapAwaitingAgent);
+    render(
+      <SchoolSiftApp initialBootstrap={bootstrapWithFailedMessage} />,
+    );
+    expect(
+      screen.getByText(/exceeds the 25 MB limit/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Couldn't process" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry analysis" }),
+    );
+    await waitFor(() =>
+      expect(retryMessage).toHaveBeenCalledWith("msg-3"),
+    );
   });
 });
 

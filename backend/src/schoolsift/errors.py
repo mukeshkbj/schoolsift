@@ -96,6 +96,11 @@ class AgentNotConfiguredError(SchoolSiftError):
     code = "AGENT_NOT_CONFIGURED"
 
 
+class ModelAccessError(SchoolSiftError):
+    status_code = 503
+    code = "MODEL_UNAVAILABLE"
+
+
 class UnsafeProposalError(SchoolSiftError):
     status_code = 422
     code = "UNSAFE_PROPOSAL"

@@ -1106,6 +1106,36 @@ class SQLiteStore:
         finally:
             con.close()
 
+    def reset_failed_message(self, household_id: str, message_id: str) -> MessageRecord:
+        con = self._connect()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            cur = con.execute(
+                "UPDATE messages SET status = 'awaiting_agent',"
+                " manual_review_reason = NULL"
+                " WHERE id = ? AND household_id = ? AND status = 'failed'",
+                (message_id, household_id),
+            )
+            if cur.rowcount == 0:
+                existing = con.execute(
+                    "SELECT status FROM messages WHERE id = ? AND household_id = ?",
+                    (message_id, household_id),
+                ).fetchone()
+                if existing is None:
+                    raise NotFoundError(f"Unknown message: {message_id}")
+                raise ConflictError("This message is not in a failed state.")
+            row = con.execute(
+                f"SELECT {MESSAGE_COLS} FROM messages WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+        return _message_row(row)
+
     def list_messages(self, household_id: str) -> list[MessageRecord]:
         con = self._connect()
         try:

@@ -276,7 +276,7 @@
   "boundaries": [
     {
       "kind": "region",
-      "label": "AWS account (deployment deferred; local SQLite + keyring fallback)",
+      "label": "AWS account, us-east-1 (local mode: SQLite + OS keyring)",
       "wraps": [
         "cognito",
         "content",

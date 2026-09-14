@@ -5018,7 +5018,7 @@
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="AWS account (deployment deferred; local SQLite + keyring fallback)" x="278" y="123" width="1004" height="499" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="AWS account, us-east-1 (local mode: SQLite + OS keyring)" x="278" y="123" width="1004" height="499" rx="12" class="c-region" stroke-width="1"/>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="provider side effects only after approval" x="556" y="141" width="448" height="106" rx="8" class="c-security-group" stroke-width="1"/>
 
@@ -5066,8 +5066,8 @@
         <text data-detail="context" x="1185" y="85" class="t-muted" font-size="8.7" text-anchor="middle">OAuth, change notifications</text>
         </g>
 
-        <g id="node-cognito" data-node-id="cognito" data-node-label="Amazon Cognito" tabindex="0" role="button" aria-label="Focus Amazon Cognito, ID tokens, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="security" data-node-sublabel="ID tokens" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Amazon Cognito · ID tokens · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-cognito" data-node-id="cognito" data-node-label="Amazon Cognito" tabindex="0" role="button" aria-label="Focus Amazon Cognito, ID tokens, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="security" data-node-sublabel="ID tokens" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Amazon Cognito · ID tokens · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="300" y="165" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="300" y="165" width="150" height="62" rx="6" class="c-security" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(306 171) scale(0.6875)">
@@ -5078,8 +5078,8 @@
         <text data-detail="context" x="375" y="210" class="t-muted" font-size="9" text-anchor="middle">ID tokens</text>
         </g>
 
-        <g id="node-content" data-node-id="content" data-node-label="Encrypted content" tabindex="0" role="button" aria-label="Focus Encrypted content, S3, 30-day expiry, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="database" data-node-sublabel="S3, 30-day expiry" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Encrypted content · S3, 30-day expiry · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-content" data-node-id="content" data-node-label="Encrypted content" tabindex="0" role="button" aria-label="Focus Encrypted content, S3, 30-day expiry, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="database" data-node-sublabel="S3, 30-day expiry" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Encrypted content · S3, 30-day expiry · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="840" y="540" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="840" y="540" width="150" height="62" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(846 546) scale(0.6875)">
@@ -5090,8 +5090,8 @@
         <text data-detail="context" x="915" y="585" class="t-muted" font-size="9" text-anchor="middle">S3, 30-day expiry</text>
         </g>
 
-        <g id="node-secrets" data-node-id="secrets" data-node-label="Secrets Manager" tabindex="0" role="button" aria-label="Focus Secrets Manager, per-inbox tokens, KMS, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="security" data-node-sublabel="per-inbox tokens, KMS" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Secrets Manager · per-inbox tokens, KMS · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-secrets" data-node-id="secrets" data-node-label="Secrets Manager" tabindex="0" role="button" aria-label="Focus Secrets Manager, per-inbox tokens, KMS, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="security" data-node-sublabel="per-inbox tokens, KMS" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Secrets Manager · per-inbox tokens, KMS · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="1110" y="540" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="1110" y="540" width="150" height="62" rx="6" class="c-security" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1116 546) scale(0.6875)">
@@ -5102,8 +5102,8 @@
         <text data-detail="context" x="1185" y="585" class="t-muted" font-size="9" text-anchor="middle">per-inbox tokens, KMS</text>
         </g>
 
-        <g id="node-exec_queue" data-node-id="exec_queue" data-node-label="Execution queue" tabindex="0" role="button" aria-label="Focus Execution queue, SQS FIFO, idempotent, AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="SQS FIFO, idempotent" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval">
-          <title>Execution queue · SQS FIFO, idempotent · AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval</title>
+        <g id="node-exec_queue" data-node-id="exec_queue" data-node-label="Execution queue" tabindex="0" role="button" aria-label="Focus Execution queue, SQS FIFO, idempotent, AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="SQS FIFO, idempotent" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval">
+          <title>Execution queue · SQS FIFO, idempotent · AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval</title>
           <rect x="570" y="165" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="570" y="165" width="150" height="62" rx="6" class="c-messagebus" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(576 171) scale(0.6875)">
@@ -5116,8 +5116,8 @@
         <text data-detail="context" x="645" y="210" class="t-muted" font-size="9" text-anchor="middle">SQS FIFO, idempotent</text>
         </g>
 
-        <g id="node-exec_worker" data-node-id="exec_worker" data-node-label="Execution worker" tabindex="0" role="button" aria-label="Focus Execution worker, reply / event / PDF, AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reply / event / PDF" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval">
-          <title>Execution worker · reply / event / PDF · AWS account (deployment deferred; local SQLite + keyring fallback) › provider side effects only after approval</title>
+        <g id="node-exec_worker" data-node-id="exec_worker" data-node-label="Execution worker" tabindex="0" role="button" aria-label="Focus Execution worker, reply / event / PDF, AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reply / event / PDF" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval">
+          <title>Execution worker · reply / event / PDF · AWS account, us-east-1 (local mode: SQLite + OS keyring) › provider side effects only after approval</title>
           <rect x="840" y="165" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="840" y="165" width="150" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(846 171) scale(0.6875)">
@@ -5127,8 +5127,8 @@
         <text data-detail="context" x="915" y="210" class="t-muted" font-size="9" text-anchor="middle">reply / event / PDF</text>
         </g>
 
-        <g id="node-webhooks" data-node-id="webhooks" data-node-label="Webhook receivers" tabindex="0" role="button" aria-label="Focus Webhook receivers, verify, then enqueue, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="verify, then enqueue" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Webhook receivers · verify, then enqueue · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-webhooks" data-node-id="webhooks" data-node-label="Webhook receivers" tabindex="0" role="button" aria-label="Focus Webhook receivers, verify, then enqueue, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="verify, then enqueue" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Webhook receivers · verify, then enqueue · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="1110" y="165" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="1110" y="165" width="150" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1116 171) scale(0.6875)">
@@ -5138,8 +5138,8 @@
         <text data-detail="context" x="1185" y="210" class="t-muted" font-size="9" text-anchor="middle">verify, then enqueue</text>
         </g>
 
-        <g id="node-ingest_queue" data-node-id="ingest_queue" data-node-label="Ingestion queue" tabindex="0" role="button" aria-label="Focus Ingestion queue, SQS FIFO + DLQ, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="SQS FIFO + DLQ" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Ingestion queue · SQS FIFO + DLQ · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-ingest_queue" data-node-id="ingest_queue" data-node-label="Ingestion queue" tabindex="0" role="button" aria-label="Focus Ingestion queue, SQS FIFO + DLQ, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="SQS FIFO + DLQ" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Ingestion queue · SQS FIFO + DLQ · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="1110" y="290" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="1110" y="290" width="150" height="62" rx="6" class="c-messagebus" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(1116 296) scale(0.6875)">
@@ -5152,8 +5152,8 @@
         <text data-detail="context" x="1185" y="335" class="t-muted" font-size="9" text-anchor="middle">SQS FIFO + DLQ</text>
         </g>
 
-        <g id="node-ingest_worker" data-node-id="ingest_worker" data-node-label="Ingestion worker" tabindex="0" role="button" aria-label="Focus Ingestion worker, delta sync, documents, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="delta sync, documents" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Ingestion worker · delta sync, documents · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-ingest_worker" data-node-id="ingest_worker" data-node-label="Ingestion worker" tabindex="0" role="button" aria-label="Focus Ingestion worker, delta sync, documents, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="delta sync, documents" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Ingestion worker · delta sync, documents · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="1110" y="415" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="1110" y="415" width="150" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1116 421) scale(0.6875)">
@@ -5175,8 +5175,8 @@
         <text data-detail="context" x="105" y="335" class="t-muted" font-size="9" text-anchor="middle">owner / editor / viewer</text>
         </g>
 
-        <g id="node-web" data-node-id="web" data-node-label="SchoolSift Web" tabindex="0" role="button" aria-label="Focus SchoolSift Web, Next.js 15, PKCE, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Next.js 15, PKCE" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>SchoolSift Web · Next.js 15, PKCE · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-web" data-node-id="web" data-node-label="SchoolSift Web" tabindex="0" role="button" aria-label="Focus SchoolSift Web, Next.js 15, PKCE, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Next.js 15, PKCE" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>SchoolSift Web · Next.js 15, PKCE · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="300" y="290" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="300" y="290" width="150" height="62" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(306 296) scale(0.6875)">
@@ -5189,8 +5189,8 @@
         <text data-detail="context" x="375" y="335" class="t-muted" font-size="9" text-anchor="middle">Next.js 15, PKCE</text>
         </g>
 
-        <g id="node-api" data-node-id="api" data-node-label="SchoolSift API" tabindex="0" role="button" aria-label="Focus SchoolSift API, FastAPI, household-scoped, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="FastAPI, household-scoped" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>SchoolSift API · FastAPI, household-scoped · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-api" data-node-id="api" data-node-label="SchoolSift API" tabindex="0" role="button" aria-label="Focus SchoolSift API, FastAPI, household-scoped, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="FastAPI, household-scoped" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>SchoolSift API · FastAPI, household-scoped · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="570" y="290" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="570" y="290" width="150" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(576 296) scale(0.6875)">
@@ -5200,8 +5200,8 @@
         <text data-detail="context" x="645" y="335" class="t-muted" font-size="9" text-anchor="middle">FastAPI, household-scoped</text>
         </g>
 
-        <g id="node-state" data-node-id="state" data-node-label="State store" tabindex="0" role="button" aria-label="Focus State store, DynamoDB / SQLite locally, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="database" data-node-sublabel="DynamoDB / SQLite locally" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>State store · DynamoDB / SQLite locally · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-state" data-node-id="state" data-node-label="State store" tabindex="0" role="button" aria-label="Focus State store, DynamoDB / SQLite locally, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="database" data-node-sublabel="DynamoDB / SQLite locally" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>State store · DynamoDB / SQLite locally · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="840" y="290" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="840" y="290" width="150" height="62" rx="6" class="c-database" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(846 296) scale(0.6875)">
@@ -5212,8 +5212,8 @@
         <text data-detail="context" x="915" y="335" class="t-muted" font-size="9" text-anchor="middle">DynamoDB / SQLite locally</text>
         </g>
 
-        <g id="node-agentcore" data-node-id="agentcore" data-node-label="AgentCore Runtime" tabindex="0" role="button" aria-label="Focus AgentCore Runtime, Strands, read-only tools, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="Strands, read-only tools" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>AgentCore Runtime · Strands, read-only tools · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-agentcore" data-node-id="agentcore" data-node-label="AgentCore Runtime" tabindex="0" role="button" aria-label="Focus AgentCore Runtime, Strands, read-only tools, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="Strands, read-only tools" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>AgentCore Runtime · Strands, read-only tools · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="840" y="415" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="840" y="415" width="150" height="62" rx="6" class="c-cloud" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(846 421) scale(0.6875)">
@@ -5223,8 +5223,8 @@
         <text data-detail="context" x="915" y="460" class="t-muted" font-size="9" text-anchor="middle">Strands, read-only tools</text>
         </g>
 
-        <g id="node-bedrock" data-node-id="bedrock" data-node-label="Amazon Bedrock" tabindex="0" role="button" aria-label="Focus Amazon Bedrock, structured output, AWS account (deployment deferred; local SQLite + keyring fallback)" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="structured output" data-node-context="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <title>Amazon Bedrock · structured output · AWS account (deployment deferred; local SQLite + keyring fallback)</title>
+        <g id="node-bedrock" data-node-id="bedrock" data-node-label="Amazon Bedrock" tabindex="0" role="button" aria-label="Focus Amazon Bedrock, structured output, AWS account, us-east-1 (local mode: SQLite + OS keyring)" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="structured output" data-node-context="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <title>Amazon Bedrock · structured output · AWS account, us-east-1 (local mode: SQLite + OS keyring)</title>
           <rect x="570" y="415" width="150" height="62" rx="6" class="c-mask"/>
           <rect x="570" y="415" width="150" height="62" rx="6" class="c-cloud" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(576 421) scale(0.6875)">
@@ -5299,9 +5299,9 @@
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="AWS account (deployment deferred; local SQLite + keyring fallback)">
-          <rect data-graph-role="structural-frame-label-mask" x="282" y="127" width="366.4" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label x="286" y="140" class="t-cloud" font-size="9" font-weight="600">AWS account (deployment deferred; local SQLite + keyring fallback)</text>
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="AWS account, us-east-1 (local mode: SQLite + OS keyring)">
+          <rect data-graph-role="structural-frame-label-mask" x="282" y="127" width="312.4" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label x="286" y="140" class="t-cloud" font-size="9" font-weight="600">AWS account, us-east-1 (local mode: SQLite + OS keyring)</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="security-group" data-composition-frame-label="provider side effects only after approval">

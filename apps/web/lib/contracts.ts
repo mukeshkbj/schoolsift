@@ -165,6 +165,8 @@ export const schoolSourceSchema = z
     connection_id: z.string(),
     sender_email: z.string(),
     sender_domain: z.string(),
+    sender_name: z.string().default(""),
+    message_count: z.number().int().default(0),
     status: z.enum(["suggested", "confirmed", "rejected"]),
     first_seen_at: z.string(),
     last_seen_at: z.string(),

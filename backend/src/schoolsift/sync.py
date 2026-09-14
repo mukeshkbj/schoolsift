@@ -139,6 +139,7 @@ def _sync_pages(
                 household_id,
                 connection_id,
                 sender_email=header.sender_email,
+                sender_name=header.sender_name,
                 seen_at=header.received_at,
             )
             record = store.upsert_message_header(household_id, connection_id, header)

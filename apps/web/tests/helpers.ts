@@ -63,6 +63,8 @@ export const suggestedSource = {
   connection_id: "conn-1",
   sender_email: "office@maplegrove.example",
   sender_domain: "maplegrove.example",
+  sender_name: "Maple Grove Office",
+  message_count: 3,
   status: "suggested" as const,
   first_seen_at: "2026-09-13T00:00:00Z",
   last_seen_at: "2026-09-13T00:00:00Z",

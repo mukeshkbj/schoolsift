@@ -28,6 +28,7 @@ type DomainGroup = {
   domain: string;
   rows: SchoolSource[];
   total: number;
+  messageTotal: number;
   pendingIds: string[];
   collapsible: boolean;
   collapsed: boolean;
@@ -77,7 +78,8 @@ export default function SendersView({
         s.status === filter &&
         (q === "" ||
           s.sender_email.toLowerCase().includes(q) ||
-          s.sender_domain.toLowerCase().includes(q)),
+          s.sender_domain.toLowerCase().includes(q) ||
+          s.sender_name.toLowerCase().includes(q)),
     );
     const byDomain = new Map<string, SchoolSource[]>();
     for (const s of matched) {
@@ -110,6 +112,7 @@ export default function SendersView({
         domain,
         rows,
         total: items.length,
+        messageTotal: items.reduce((n, s) => n + s.message_count, 0),
         pendingIds: items
           .filter((s) => s.status === "suggested")
           .map((s) => s.id),
@@ -198,6 +201,8 @@ export default function SendersView({
                 <h3 className="sender-domain-name">{g.domain}</h3>
                 <span className="connection-meta">
                   {g.total} sender{g.total === 1 ? "" : "s"}
+                  {g.messageTotal > 0 &&
+                    ` · ${g.messageTotal} message${g.messageTotal === 1 ? "" : "s"}`}
                 </span>
                 {g.collapsible && (
                   <button
@@ -241,11 +246,24 @@ export default function SendersView({
                   {g.rows.map((s) => (
                     <li key={s.id} className="sender-row">
                       <div className="sender-row-info">
-                        <span className="sender-addr">
+                        {s.sender_name !== "" && (
+                          <span className="sender-name">
+                            {s.sender_name}
+                          </span>
+                        )}
+                        <span
+                          className={
+                            s.sender_name !== ""
+                              ? "sender-addr sender-addr--muted"
+                              : "sender-addr"
+                          }
+                        >
                           {s.sender_email}
                         </span>
                         <span className="sender-date">
                           last seen {relativeDate(s.last_seen_at)}
+                          {s.message_count > 0 &&
+                            ` · ${s.message_count} message${s.message_count === 1 ? "" : "s"}`}
                           {s.status === "confirmed"
                             ? " · trusted"
                             : s.status === "rejected"

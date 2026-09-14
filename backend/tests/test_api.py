@@ -630,6 +630,8 @@ def test_sync_endpoint_and_sources_flow(settings, store):
 
     srcs = c.get("/v1/sources").json()
     assert srcs[0]["sender_email"] == "office@school.org"
+    assert srcs[0]["sender_name"] == "Office"
+    assert srcs[0]["message_count"] == 1
     assert srcs[0]["status"] == "suggested"
 
     r = c.post(f"/v1/sources/{srcs[0]['id']}/confirm")
@@ -683,7 +685,11 @@ def test_sources_reject_and_cross_tenant(settings, store):
     from datetime import UTC, datetime
 
     src = store.upsert_source_suggestion(
-        h.id, conn.id, sender_email="x@y.org", seen_at=datetime.now(UTC)
+        h.id,
+        conn.id,
+        sender_email="x@y.org",
+        sender_name="Office",
+        seen_at=datetime.now(UTC),
     )
     r = c.post(f"/v1/sources/{src.id}/reject")
     assert r.status_code == 200

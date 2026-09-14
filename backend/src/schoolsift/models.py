@@ -48,6 +48,8 @@ class SchoolSource(BaseModel):
     connection_id: str
     sender_email: str
     sender_domain: str
+    sender_name: str = ""
+    message_count: int = 0
     status: Literal["suggested", "confirmed", "rejected"]
     first_seen_at: datetime
     last_seen_at: datetime

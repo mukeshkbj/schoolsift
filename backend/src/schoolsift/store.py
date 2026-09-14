@@ -175,6 +175,7 @@ class SchoolSiftStore(Protocol):
         connection_id: str,
         *,
         sender_email: str,
+        sender_name: str,
         seen_at: datetime,
     ) -> SchoolSource: ...
 

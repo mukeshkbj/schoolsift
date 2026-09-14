@@ -44,12 +44,16 @@ const source = (
   id: string,
   email: string,
   status: SchoolSource["status"] = "suggested",
+  name = "",
+  count = 0,
 ): SchoolSource => ({
   id,
   household_id: "hh-1",
   connection_id: "conn-1",
   sender_email: email,
   sender_domain: email.split("@")[1],
+  sender_name: name,
+  message_count: count,
   status,
   first_seen_at: "2026-09-13T00:00:00Z",
   last_seen_at: "2026-09-13T00:00:00Z",
@@ -125,6 +129,49 @@ describe("senders view", () => {
     await userEvent.type(
       screen.getByLabelText("Search senders"),
       "otherdistrict",
+    );
+    expect(
+      screen.getByText("news@otherdistrict.example"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("office@maplegrove.example"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the display name before the address and message counts", async () => {
+    render(
+      <SchoolSiftApp
+        initialBootstrap={bootWithSources([
+          source("s1", "office@maplegrove.example", "suggested", "Maple Grove Elementary", 12),
+          source("s2", "pta@maplegrove.example"),
+        ])}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Senders/ }));
+    expect(
+      screen.getByText("Maple Grove Elementary"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/last seen yesterday · 12 messages/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 senders · 12 messages/),
+    ).toBeInTheDocument();
+  });
+
+  it("searches by display name", async () => {
+    render(
+      <SchoolSiftApp
+        initialBootstrap={bootWithSources([
+          source("s1", "office@maplegrove.example", "suggested", "Maple Grove Elementary"),
+          source("s2", "news@otherdistrict.example", "suggested", "District Digest"),
+        ])}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Senders/ }));
+    await userEvent.type(
+      screen.getByLabelText("Search senders"),
+      "digest",
     );
     expect(
       screen.getByText("news@otherdistrict.example"),

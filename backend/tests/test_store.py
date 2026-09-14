@@ -969,3 +969,142 @@ def test_concurrent_identity_claim_single_winner(store):
     t1.join(15)
     t2.join(15)
     assert sorted(results) == ["conflict", "ok"]
+
+
+def _insert_raw_message(
+    con: sqlite3.Connection,
+    conn_id: str,
+    pmid: str,
+    name: str,
+    email: str,
+    received: str,
+) -> None:
+    con.execute(
+        "INSERT INTO messages (id, household_id, connection_id,"
+        " provider_message_id, thread_id, sender_name, sender_email, reply_to,"
+        " subject, received_at, source_confirmed, status, body_ref,"
+        " attachment_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            f"msg-{pmid}",
+            "hh-1",
+            conn_id,
+            pmid,
+            f"t-{pmid}",
+            name,
+            email,
+            email,
+            "Subject",
+            received,
+            0,
+            "awaiting_source",
+            None,
+            "[]",
+        ),
+    )
+
+
+def test_source_suggestion_stores_name_and_counts_messages(store):
+    h = store.create_household(name="H", timezone="UTC")
+    conn = store.upsert_connection(
+        h.id, provider="gmail", provider_subject="s", email="a@x.com"
+    )
+    now = datetime.now(UTC)
+    src = store.upsert_source_suggestion(
+        h.id,
+        conn.id,
+        sender_email="Office@X.org",
+        sender_name='" School Office "',
+        seen_at=now,
+    )
+    assert src.sender_email == "office@x.org"
+    assert src.sender_name == "School Office"
+    assert src.message_count == 0
+
+    con = sqlite3.connect(store.path)
+    try:
+        for pmid in ("p1", "p2"):
+            _insert_raw_message(
+                con,
+                conn.id,
+                pmid,
+                "School Office",
+                "office@x.org",
+                now.isoformat(),
+            )
+        con.commit()
+    finally:
+        con.close()
+    src = store.list_sources(h.id)[0]
+    assert src.message_count == 2
+
+    src = store.upsert_source_suggestion(
+        h.id,
+        conn.id,
+        sender_email="office@x.org",
+        sender_name="Main Office",
+        seen_at=now,
+    )
+    assert src.sender_name == "Main Office"
+    src = store.upsert_source_suggestion(
+        h.id,
+        conn.id,
+        sender_email="office@x.org",
+        sender_name="",
+        seen_at=now,
+    )
+    assert src.sender_name == "Main Office"
+    assert src.message_count == 2
+
+
+def test_migration_v10_backfills_sender_names(tmp_path):
+    from schoolsift.sqlite_store import MIGRATIONS
+
+    path = tmp_path / "v9.sqlite"
+    con = sqlite3.connect(path)
+    for migrate in MIGRATIONS[:9]:
+        migrate(con)
+    con.execute("INSERT INTO schema_version (id, version) VALUES (1, 9)")
+    con.execute(
+        "INSERT INTO households (id, name, timezone, created_at)"
+        " VALUES ('hh-1', 'Fam', 'UTC', '2026-01-01T00:00:00+00:00')"
+    )
+    con.execute(
+        "INSERT INTO connections (id, household_id, provider,"
+        " provider_subject, email, status, last_sync_at, created_at)"
+        " VALUES ('conn-1', 'hh-1', 'gmail', 'sub-1', 'a@x.com', 'connected',"
+        " NULL, '2026-01-01T00:00:00+00:00')"
+    )
+    for sid, email in (("src-1", "office@x.org"), ("src-2", "quiet@y.org")):
+        con.execute(
+            "INSERT INTO school_sources (id, household_id, connection_id,"
+            " sender_email, sender_domain, status, first_seen_at, last_seen_at)"
+            " VALUES (?, 'hh-1', 'conn-1', ?, ?, 'suggested',"
+            " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            (sid, email, email.split("@")[1]),
+        )
+    _insert_raw_message(
+        con,
+        "conn-1",
+        "old",
+        "Old Name",
+        "OFFICE@X.ORG",
+        "2026-01-02T00:00:00+00:00",
+    )
+    _insert_raw_message(
+        con,
+        "conn-1",
+        "new",
+        "Maple Grove Office",
+        "office@x.org",
+        "2026-01-03T00:00:00+00:00",
+    )
+    con.commit()
+    con.close()
+
+    store = SQLiteStore(path)
+    store.initialize()
+    srcs = {s.sender_email: s for s in store.list_sources("hh-1")}
+    assert srcs["office@x.org"].sender_name == "Maple Grove Office"
+    assert srcs["office@x.org"].message_count == 2
+    assert srcs["quiet@y.org"].sender_name == ""
+    assert srcs["quiet@y.org"].message_count == 0

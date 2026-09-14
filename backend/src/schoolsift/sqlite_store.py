@@ -143,7 +143,17 @@ DOCUMENT_COLS = "id, household_id, message_id, name, mime, content_ref, acroform
 
 SOURCE_COLS = (
     "id, household_id, connection_id, sender_email, sender_domain,"
-    " status, first_seen_at, last_seen_at"
+    " sender_name, status, first_seen_at, last_seen_at"
+)
+
+# message_count is computed at read time: a stored counter would drift
+# because upsert_source_suggestion runs once per header on every sync,
+# including messages that upsert_message_header dedupes away.
+SOURCE_SELECT = (
+    f"{SOURCE_COLS}, (SELECT COUNT(*) FROM messages"
+    " WHERE messages.connection_id = school_sources.connection_id"
+    " AND lower(messages.sender_email) = lower(school_sources.sender_email))"
+    " AS message_count"
 )
 
 _UNSET = object()
@@ -423,6 +433,32 @@ def _migrate_to_9(con: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_10(con: sqlite3.Connection) -> None:
+    _add_column(
+        con,
+        "school_sources",
+        "sender_name",
+        "sender_name TEXT NOT NULL DEFAULT ''",
+    )
+    con.execute(
+        """
+        UPDATE school_sources SET sender_name = (
+            SELECT m.sender_name FROM messages m
+            WHERE m.connection_id = school_sources.connection_id
+              AND lower(m.sender_email) = lower(school_sources.sender_email)
+              AND m.sender_name <> ''
+            ORDER BY m.received_at DESC LIMIT 1
+        )
+        WHERE EXISTS (
+            SELECT 1 FROM messages m
+            WHERE m.connection_id = school_sources.connection_id
+              AND lower(m.sender_email) = lower(school_sources.sender_email)
+              AND m.sender_name <> ''
+        )
+        """
+    )
+
+
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _migrate_to_1,
     _migrate_to_2,
@@ -433,6 +469,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _migrate_to_7,
     _migrate_to_8,
     _migrate_to_9,
+    _migrate_to_10,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -480,9 +517,11 @@ def _source_row(row: tuple[Any, ...]) -> SchoolSource:
         connection_id=row[2],
         sender_email=row[3],
         sender_domain=row[4],
-        status=row[5],
-        first_seen_at=row[6],
-        last_seen_at=row[7],
+        sender_name=row[5],
+        status=row[6],
+        first_seen_at=row[7],
+        last_seen_at=row[8],
+        message_count=row[9],
     )
 
 
@@ -850,8 +889,10 @@ class SQLiteStore:
         connection_id: str,
         *,
         sender_email: str,
+        sender_name: str,
         seen_at: datetime,
     ) -> SchoolSource:
+        name = sender_name.strip().strip('"').strip()[:200]
         con = self._connect()
         try:
             con.execute("BEGIN IMMEDIATE")
@@ -859,22 +900,27 @@ class SQLiteStore:
             domain = sender_email.rsplit("@", 1)[-1].lower()
             con.execute(
                 "INSERT INTO school_sources (id, household_id, connection_id,"
-                " sender_email, sender_domain, status, first_seen_at, last_seen_at)"
-                " VALUES (?, ?, ?, ?, ?, 'suggested', ?, ?)"
+                " sender_email, sender_domain, sender_name, status,"
+                " first_seen_at, last_seen_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'suggested', ?, ?)"
                 " ON CONFLICT (connection_id, sender_email)"
-                " DO UPDATE SET last_seen_at = excluded.last_seen_at",
+                " DO UPDATE SET last_seen_at = excluded.last_seen_at,"
+                " sender_name = CASE WHEN excluded.sender_name <> ''"
+                " THEN excluded.sender_name"
+                " ELSE school_sources.sender_name END",
                 (
                     f"src-{uuid.uuid4().hex[:12]}",
                     household_id,
                     connection_id,
                     sender_email.lower(),
                     domain,
+                    name,
                     seen_at.isoformat(),
                     seen_at.isoformat(),
                 ),
             )
             row = con.execute(
-                f"SELECT {SOURCE_COLS} FROM school_sources"
+                f"SELECT {SOURCE_SELECT} FROM school_sources"
                 " WHERE connection_id = ? AND sender_email = ?",
                 (connection_id, sender_email.lower()),
             ).fetchone()
@@ -890,7 +936,7 @@ class SQLiteStore:
         con = self._connect()
         try:
             rows = con.execute(
-                f"SELECT {SOURCE_COLS} FROM school_sources"
+                f"SELECT {SOURCE_SELECT} FROM school_sources"
                 " WHERE household_id = ? ORDER BY last_seen_at DESC",
                 (household_id,),
             ).fetchall()
@@ -915,7 +961,7 @@ class SQLiteStore:
             if cur.rowcount == 0:
                 raise NotFoundError(f"Unknown source: {source_id}")
             row = con.execute(
-                f"SELECT {SOURCE_COLS} FROM school_sources WHERE id = ?",
+                f"SELECT {SOURCE_SELECT} FROM school_sources WHERE id = ?",
                 (source_id,),
             ).fetchone()
             con.commit()

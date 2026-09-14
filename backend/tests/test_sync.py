@@ -547,3 +547,69 @@ def test_terminal_page_clears_cursor(env):
     result = run(env, FakeMail(pages, {}))
     assert result.has_more is False
     assert result.next_cursor is None
+
+
+def test_source_suggestion_records_display_name(env):
+    store, h, _conn, _, _ = env
+
+    def named_header(pmid: str, name: str) -> MessageHeader:
+        return MessageHeader(
+            provider_message_id=pmid,
+            thread_id=f"t-{pmid}",
+            sender_name=name,
+            sender_email="office@x.org",
+            reply_to="office@x.org",
+            subject="Hi",
+            received_at=datetime(2026, 9, 10, tzinfo=UTC),
+        )
+
+    run(
+        env,
+        FakeMail(
+            [
+                MessagePage(
+                    messages=[named_header("m1", "Maple Grove Office")],
+                    next_cursor=None,
+                    has_more=False,
+                )
+            ],
+            {},
+        ),
+    )
+    src = store.list_sources(h.id)[0]
+    assert src.sender_name == "Maple Grove Office"
+    assert src.message_count == 1
+
+    # re-syncing the same message must not inflate the count
+    run(
+        env,
+        FakeMail(
+            [
+                MessagePage(
+                    messages=[named_header("m1", "Maple Grove Office")],
+                    next_cursor=None,
+                    has_more=False,
+                )
+            ],
+            {},
+        ),
+    )
+    assert store.list_sources(h.id)[0].message_count == 1
+
+    # a newer name replaces the stored one; a new message bumps the count
+    run(
+        env,
+        FakeMail(
+            [
+                MessagePage(
+                    messages=[named_header("m2", "Maple Grove Elementary")],
+                    next_cursor=None,
+                    has_more=False,
+                )
+            ],
+            {},
+        ),
+    )
+    src = store.list_sources(h.id)[0]
+    assert src.sender_name == "Maple Grove Elementary"
+    assert src.message_count == 2

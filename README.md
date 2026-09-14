@@ -231,6 +231,11 @@ configured.
 - Google restricted-scope verification and Microsoft publisher verification
   have not been started.
 
+## Read more
+
+The build story, including what a real inbox taught us, is on AWS Builder
+Center: [Agents for Humans: building SchoolSift](https://builder.aws.com/content/3JJrjwp1ua3qPA6TGCBDgLQi4S3/agents-for-humans-building-schoolsift-an-agent-that-reads-school-letters-so-parents-dont-miss-the-deadline).
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).

@@ -1076,6 +1076,40 @@ def test_message_retry_route(settings, store):
     assert c.post("/v1/messages/missing/retry").status_code == 404
 
 
+def test_message_retry_requires_imported_content(settings, store):
+    c = TestClient(
+        create_app(settings=settings, store=store, providers={}, vault=FakeVault())
+    )
+    from datetime import UTC, datetime
+
+    from schoolsift.models import MessageHeader
+
+    h = store.create_household(name="H", timezone="UTC")
+    conn = store.upsert_connection(
+        h.id, provider="gmail", provider_subject="s2", email="b@x.com"
+    )
+    header = store.upsert_message_header(
+        h.id,
+        conn.id,
+        MessageHeader(
+            provider_message_id="pm-nobody",
+            thread_id="t",
+            sender_name="School",
+            sender_email="office@school.test",
+            reply_to="office@school.test",
+            subject="Letter",
+            received_at=datetime.now(UTC),
+        ),
+    )
+    store.set_message_status(
+        h.id, conn.id, "pm-nobody", "failed", reason="import failed"
+    )
+    r = c.post(f"/v1/messages/{header.id}/retry")
+    assert r.status_code == 409
+    assert "sync the inbox" in r.json()["error"]["message"]
+    assert store.get_message_record(h.id, header.id).status == "failed"
+
+
 def test_message_retry_viewer_forbidden(store):
     import sqlite3
     from datetime import UTC, datetime

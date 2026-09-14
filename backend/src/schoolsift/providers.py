@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import email
+import email.header
 import email.utils
 import hashlib
 import re
@@ -417,6 +418,14 @@ def _refresh(
     return fresh
 
 
+def _decode_header(value: str) -> str:
+    """Decode RFC 2047 encoded words (=?charset?Q?...?=) into readable text."""
+    try:
+        return str(email.header.make_header(email.header.decode_header(value)))
+    except Exception:
+        return value
+
+
 def _header_map(meta: _GmailMeta) -> dict[str, str]:
     return {h.name.lower(): h.value for h in meta.payload.headers}
 
@@ -557,10 +566,10 @@ class GmailOAuthProvider:
         return MessageHeader(
             provider_message_id=meta.id,
             thread_id=meta.threadId or ref.threadId,
-            sender_name=name or addr,
+            sender_name=_decode_header(name) or addr,
             sender_email=addr.lower(),
             reply_to=(reply_addr or addr).lower(),
-            subject=headers.get("subject", ""),
+            subject=_decode_header(headers.get("subject", "")),
             received_at=_received_at(meta.internalDate, headers),
         )
 
@@ -728,10 +737,10 @@ class GmailOAuthProvider:
         return FetchedMessage(
             provider_message_id=provider_message_id,
             thread_id=meta.get("thread-id", ""),
-            sender_name=name or addr,
+            sender_name=_decode_header(name) or addr,
             sender_email=addr.lower(),
             reply_to=(reply_addr or addr).lower(),
-            subject=meta.get("subject", ""),
+            subject=_decode_header(meta.get("subject", "")),
             received_at=_received_at(None, meta),
             body_text=_plain_text(msg),
             attachments=_attachments(provider_message_id, msg),

@@ -176,8 +176,43 @@ def _text(content: bytes, record: DocumentRecord) -> str:
         raise _unreadable(record, "is not readable text") from e
 
 
+_GENERIC_MIMES = {
+    "",
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/x-pdf",
+}
+_EXTENSION_MIMES = {
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".md": "text/markdown",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".docx": _DOCX,
+    ".xlsx": _XLSX,
+}
+
+
+def effective_mime(name: str, mime: str, content: bytes) -> str:
+    """Providers often label attachments application/octet-stream; sniff those."""
+    declared = mime.split(";")[0].strip().lower()
+    if declared not in _GENERIC_MIMES:
+        return declared
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    if content.startswith(b"\x89PNG"):
+        return "image/png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    sniffed = _EXTENSION_MIMES.get(f".{ext}", declared)
+    if sniffed in (_DOCX, _XLSX) and not content.startswith(b"PK\x03\x04"):
+        return declared
+    return sniffed
+
+
 def read_document(record: DocumentRecord, content: bytes) -> DocumentContent:
-    mime = record.mime.split(";")[0].strip().lower()
+    mime = effective_mime(record.name, record.mime, content)
     if len(content) > MAX_DOCUMENT_BYTES:
         raise _unreadable(record, "exceeds the 4.5 MB document limit")
     text = ""
@@ -199,7 +234,7 @@ def read_document(record: DocumentRecord, content: bytes) -> DocumentContent:
     return DocumentContent(
         document_id=record.id,
         name=record.name,
-        mime=record.mime,
+        mime=mime,
         text=text,
         acroform_fields=fields,
         source_bytes=content,

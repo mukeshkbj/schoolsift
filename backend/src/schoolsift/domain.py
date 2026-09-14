@@ -19,7 +19,10 @@ FieldValue = Annotated[str, Field(max_length=10_000)]
 
 
 class EvidenceSpan(BaseModel):
-    source: str = Field(max_length=1_000)
+    source: str = Field(
+        max_length=1_000,
+        description="Exactly 'body' for the email text, or the attachment filename.",
+    )
     quote: str = Field(max_length=10_000)
 
 
@@ -94,7 +97,7 @@ class ActionPacket(BaseModel):
 
 class ActionPacketDraft(BaseModel):
     source_message_id: str = Field(max_length=500)
-    school_source_id: str | None = Field(max_length=500)
+    school_source_id: str | None = Field(default=None, max_length=500)
     summary: str = Field(max_length=10_000)
     child: str | None = Field(default=None, max_length=500)
     deadline: datetime | None = None

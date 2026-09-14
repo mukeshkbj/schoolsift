@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import datetime
 
@@ -7,6 +8,9 @@ from .agent import MessageAnalyzer
 from .domain import (
     ActionPacket,
     ActionPacketDraft,
+    EscalationProposal,
+    PdfFormProposal,
+    ProposalPayload,
     ProposalVersion,
     payload_digest,
 )
@@ -27,6 +31,19 @@ _GENERIC_FAILURE = (
 )
 
 
+_TOOL_MARKUP = re.compile(r"</?(?:summary|parameter|invoke|function_calls)\b", re.I)
+
+_UNKNOWN_TOKENS = {"", "unknown", "none", "na", "notspecified", "notprovided", "null"}
+
+
+def _token(value: str) -> str:
+    """Loose match key: models often drop dots, case, or punctuation in names."""
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+_BODY_ALIASES = {"body", "email body", "message body", "email", "message", "email text"}
+
+
 def _aware(value: datetime) -> bool:
     return value.utcoffset() is not None
 
@@ -39,19 +56,54 @@ def _validate_draft(
 
     if draft.source_message_id != record.id:
         raise unsafe("draft is not bound to the source message.")
+    if markup := _TOOL_MARKUP.search(draft.summary):
+        # Some models leak tool-call markup into free-text fields; keep the prose.
+        draft.summary = draft.summary[: markup.start()].strip()
+        if not draft.summary:
+            raise unsafe("summary contained only tool markup.")
     if draft.information_only and draft.proposals:
         raise unsafe("draft is information-only but includes proposals.")
     known_sources = {"body"} | {d.name for d in docs}
+    by_token = {_token(d.name): d.name for d in docs}
     for span in draft.evidence:
+        label = span.source.strip().lower()
+        if label in _BODY_ALIASES or label == record.sender_email.lower():
+            span.source = "body"
+        elif span.source not in known_sources:
+            span.source = by_token.get(_token(span.source), span.source)
         if span.source not in known_sources:
             raise unsafe(f"evidence cites unknown source '{span.source}'.")
+    if draft.child is not None and _token(draft.child) in _UNKNOWN_TOKENS:
+        draft.child = None
     if draft.deadline is not None and not _aware(draft.deadline):
         raise unsafe("deadline is not timezone-aware.")
+    proposals: list[ProposalPayload] = []
     for payload in draft.proposals:
+        if (
+            isinstance(payload, PdfFormProposal)
+            and payload.document_name not in known_sources
+        ):
+            payload.document_name = by_token.get(
+                _token(payload.document_name), payload.document_name
+            )
         try:
             validate_proposal_payload(record, docs, payload)
         except UnsafeProposalError as e:
+            if isinstance(payload, PdfFormProposal):
+                # A form we cannot fill safely is still worth surfacing to a
+                # person; the message itself is fine.
+                proposals.append(
+                    EscalationProposal(
+                        kind="escalation",
+                        reason="unsupported_document",
+                        detail=f"'{payload.document_name}' needs to be completed"
+                        f" by hand: {e.message}",
+                    )
+                )
+                continue
             raise unsafe(e.message) from e
+        proposals.append(payload)
+    draft.proposals = proposals
 
 
 def _mark_failed(

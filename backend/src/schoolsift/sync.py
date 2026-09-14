@@ -170,7 +170,7 @@ def _sync_pages(
                 refs.append(content.put(household_id, fetched.body_text.encode()))
                 attachments = []
                 for a in fetched.attachments:
-                    fields = read_document(
+                    doc = read_document(
                         DocumentRecord(
                             id="",
                             household_id=household_id,
@@ -181,9 +181,11 @@ def _sync_pages(
                             acroform_fields=[],
                         ),
                         a.content,
-                    ).acroform_fields
+                    )
                     refs.append(content.put(household_id, a.content))
-                    attachments.append((a.name, a.mime, refs[-1], fields))
+                    attachments.append(
+                        (a.name, doc.mime, refs[-1], doc.acroform_fields)
+                    )
                 store.save_fetched_message(
                     household_id,
                     connection_id,

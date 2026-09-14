@@ -185,6 +185,30 @@ def test_image_returns_metadata_empty_text():
     assert doc.source_bytes == b"\x89PNGimg"
 
 
+def test_octet_stream_pdf_sniffed_by_content():
+    doc = read_document(
+        record(name="Flu letter.pdf", mime="application/octet-stream"),
+        pdf_bytes(with_field=True),
+    )
+    assert doc.mime == "application/pdf"
+    assert doc.acroform_fields == ["student_name"]
+
+
+def test_octet_stream_text_sniffed_by_extension():
+    doc = read_document(
+        record(name="notes.txt", mime="application/octet-stream"), b"hi"
+    )
+    assert doc.mime == "text/plain"
+    assert doc.text == "hi"
+
+
+def test_octet_stream_unknown_still_rejected():
+    with pytest.raises(UnsupportedDocumentError):
+        read_document(
+            record(name="pack.bin", mime="application/octet-stream"), b"\x00\x01"
+        )
+
+
 def test_unsupported_mime_rejected():
     with pytest.raises(UnsupportedDocumentError):
         read_document(record(name="pack.zip", mime="application/zip"), b"PK")

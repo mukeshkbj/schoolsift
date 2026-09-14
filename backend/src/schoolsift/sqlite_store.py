@@ -1113,16 +1113,23 @@ class SQLiteStore:
             cur = con.execute(
                 "UPDATE messages SET status = 'awaiting_agent',"
                 " manual_review_reason = NULL"
-                " WHERE id = ? AND household_id = ? AND status = 'failed'",
+                " WHERE id = ? AND household_id = ? AND status = 'failed'"
+                " AND body_ref IS NOT NULL",
                 (message_id, household_id),
             )
             if cur.rowcount == 0:
                 existing = con.execute(
-                    "SELECT status FROM messages WHERE id = ? AND household_id = ?",
+                    "SELECT status, body_ref FROM messages"
+                    " WHERE id = ? AND household_id = ?",
                     (message_id, household_id),
                 ).fetchone()
                 if existing is None:
                     raise NotFoundError(f"Unknown message: {message_id}")
+                if existing[0] == "failed":
+                    raise ConflictError(
+                        "This message's content was never imported;"
+                        " sync the inbox again to retry."
+                    )
                 raise ConflictError("This message is not in a failed state.")
             row = con.execute(
                 f"SELECT {MESSAGE_COLS} FROM messages WHERE id = ?",

@@ -185,6 +185,38 @@ def test_evidence_unknown_source_rejected(env):
     assert store.get_message_record(h.id, record.id).status == "failed"
 
 
+def test_evidence_body_aliases_normalized(env):
+    store, h, _, record = env
+    draft = draft_for(record.id)
+    draft.evidence = [
+        EvidenceSpan(source="Email body", quote="q1"),
+        EvidenceSpan(source=record.sender_email.upper(), quote="q2"),
+    ]
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    assert [e.source for e in packet.evidence] == ["body", "body"]
+
+
+def test_summary_tool_markup_stripped(env):
+    store, h, _, record = env
+    draft = draft_for(record.id)
+    draft.summary = 'Trip on Friday.</summary>\n<parameter name="child">Maya'
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    assert packet.summary == "Trip on Friday."
+
+
+def test_evidence_document_name_loose_match_and_unknown_child(env):
+    store, h, _, record = env
+    docs = store.list_document_records(h.id, record.id)
+    assert docs, "fixture message must carry an attachment"
+    draft = draft_for(record.id)
+    mangled = docs[0].name.replace(".", "-").upper()
+    draft.evidence = [EvidenceSpan(source=mangled, quote="q")]
+    draft.child = "<UNKNOWN>"
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    assert packet.evidence[0].source == docs[0].name
+    assert packet.child is None
+
+
 def test_naive_deadline_rejected(env):
     store, h, _, record = env
     bad = draft_for(record.id)
@@ -243,8 +275,30 @@ def test_pdf_form_sensitive_field_rejected(env):
             )
         ],
     )
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    payload = packet.proposals[0].payload
+    assert payload.kind == "escalation"
+    assert payload.reason == "unsupported_document"
+    assert "Signature and payment fields" in payload.detail
+
+
+def test_pdf_form_document_name_loose_match(env):
+    store, h, _, record = env
+    draft = draft_for(
+        record.id,
+        proposals=[
+            PdfFormProposal(
+                kind="pdf_form",
+                recipient="office@school.org",
+                subject="Completed form",
+                body="Attached is the completed form.",
+                document_name="Form-pdf",
+                fields={"student_name": "Maya"},
+            )
+        ],
+    )
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    assert packet.proposals[0].payload.document_name == "form.pdf"
 
 
 def test_pdf_form_unknown_document_rejected(env):
@@ -262,8 +316,10 @@ def test_pdf_form_unknown_document_rejected(env):
             )
         ],
     )
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    payload = packet.proposals[0].payload
+    assert payload.kind == "escalation"
+    assert "could not be matched" in payload.detail
 
 
 def test_pdf_form_safe_field_accepted(env):
@@ -341,8 +397,10 @@ def test_pdf_form_unknown_field_rejected(env):
             )
         ],
     )
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    payload = packet.proposals[0].payload
+    assert payload.kind == "escalation"
+    assert "not part of the PDF form" in payload.detail
 
 
 def test_pdf_form_non_pdf_document_rejected(env):
@@ -360,8 +418,10 @@ def test_pdf_form_non_pdf_document_rejected(env):
             )
         ],
     )
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    payload = packet.proposals[0].payload
+    assert payload.kind == "escalation"
+    assert "not a PDF form" in payload.detail
 
 
 def test_calendar_end_before_start_rejected(env):

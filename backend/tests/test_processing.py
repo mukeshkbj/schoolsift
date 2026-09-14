@@ -217,12 +217,14 @@ def test_evidence_document_name_loose_match_and_unknown_child(env):
     assert packet.child is None
 
 
-def test_naive_deadline_rejected(env):
+def test_naive_deadline_localized_to_household_timezone(env):
     store, h, _, record = env
-    bad = draft_for(record.id)
-    bad.deadline = datetime(2026, 9, 18)
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    draft = draft_for(record.id)
+    draft.deadline = datetime(2026, 9, 18, 15, 0)
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    assert packet.deadline is not None
+    assert packet.deadline.tzinfo is not None
+    assert packet.deadline.isoformat().startswith("2026-09-18T15:00:00")
 
 
 def test_reply_recipient_guard(env):
@@ -341,7 +343,7 @@ def test_pdf_form_safe_field_accepted(env):
     assert packet.proposals[0].payload.kind == "pdf_form"
 
 
-def test_calendar_proposal_naive_times_rejected(env):
+def test_calendar_proposal_naive_times_localized(env):
     store, h, _, record = env
     bad = draft_for(
         record.id,
@@ -354,8 +356,10 @@ def test_calendar_proposal_naive_times_rejected(env):
             )
         ],
     )
-    with pytest.raises(UnsafeAgentOutputError):
-        process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(bad))
+    payload = packet.proposals[0].payload
+    assert payload.kind == "calendar"
+    assert payload.starts_at.tzinfo is not None and payload.ends_at.tzinfo is not None
 
 
 def test_analyzer_crash_marks_failed_sanitized(env):

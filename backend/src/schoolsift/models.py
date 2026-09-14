@@ -157,6 +157,7 @@ class HouseholdContext(BaseModel):
     household_id: str
     children: list[str]
     connections: list[str]
+    timezone: str = "UTC"
 
 
 class NormalizedMessage(BaseModel):

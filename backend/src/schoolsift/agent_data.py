@@ -7,6 +7,7 @@ from .documents import read_document
 from .models import (
     CalendarRecord,
     DocumentContent,
+    Household,
     HouseholdContext,
     NormalizedMessage,
     RelatedAction,
@@ -19,15 +20,17 @@ class StoredAgentDataSource:
         self._store = store
         self._content = content
 
-    def _require_household(self, household_id: str) -> None:
+    def _require_household(self, household_id: str) -> Household:
         household = self._store.get_household()
         if household is None or household.id != household_id:
             raise PermissionError(f"Unknown household: {household_id}")
+        return household
 
     def get_household_context(self, household_id: str) -> HouseholdContext:
-        self._require_household(household_id)
+        household = self._require_household(household_id)
         return HouseholdContext(
             household_id=household_id,
+            timezone=household.timezone,
             children=[c.name for c in self._store.list_children(household_id)],
             connections=[
                 c.email

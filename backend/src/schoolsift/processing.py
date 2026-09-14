@@ -3,11 +3,13 @@ from __future__ import annotations
 import re
 import secrets
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .agent import MessageAnalyzer
 from .domain import (
     ActionPacket,
     ActionPacketDraft,
+    CalendarProposal,
     EscalationProposal,
     PacketAttachment,
     PdfFormProposal,
@@ -49,8 +51,17 @@ def _aware(value: datetime) -> bool:
     return value.utcoffset() is not None
 
 
+def _localize(value: datetime, tz: ZoneInfo) -> datetime:
+    """Models sometimes drop the offset; a naive time means household local time."""
+    return value if _aware(value) else value.replace(tzinfo=tz)
+
+
 def _validate_draft(
-    record: MessageRecord, docs: list[DocumentRecord], draft: ActionPacketDraft
+    record: MessageRecord,
+    docs: list[DocumentRecord],
+    draft: ActionPacketDraft,
+    *,
+    timezone: str = "UTC",
 ) -> None:
     def unsafe(detail: str) -> UnsafeAgentOutputError:
         return UnsafeAgentOutputError(f"Unsafe agent output rejected: {detail}")
@@ -76,10 +87,14 @@ def _validate_draft(
             raise unsafe(f"evidence cites unknown source '{span.source}'.")
     if draft.child is not None and _token(draft.child) in _UNKNOWN_TOKENS:
         draft.child = None
-    if draft.deadline is not None and not _aware(draft.deadline):
-        raise unsafe("deadline is not timezone-aware.")
+    tz = ZoneInfo(timezone)
+    if draft.deadline is not None:
+        draft.deadline = _localize(draft.deadline, tz)
     proposals: list[ProposalPayload] = []
     for payload in draft.proposals:
+        if isinstance(payload, CalendarProposal):
+            payload.starts_at = _localize(payload.starts_at, tz)
+            payload.ends_at = _localize(payload.ends_at, tz)
         if (
             isinstance(payload, PdfFormProposal)
             and payload.document_name not in known_sources
@@ -141,7 +156,13 @@ def process_message(
     docs = store.list_document_records(household_id, record.id)
     try:
         draft = analyzer.analyze(household_id, message_id)
-        _validate_draft(record, docs, draft)
+        household = store.get_household_by_id(household_id)
+        _validate_draft(
+            record,
+            docs,
+            draft,
+            timezone=household.timezone if household else "UTC",
+        )
     except ModelAccessError:
         # Infrastructure failure, not a message defect — leave the message
         # awaiting_agent so a later retry can process it.

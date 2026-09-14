@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol, cast
+from zoneinfo import ZoneInfo
 
 import botocore.exceptions  # type: ignore[import-untyped]
 
@@ -161,11 +162,22 @@ def prepare_agent_content(
     ds: AgentDataSource, household_id: str, message_id: str
 ) -> list[dict[str, Any]]:
     msg = ds.get_message(household_id, message_id)
+    household = ds.get_household_context(household_id)
+    local_now = datetime.now(ZoneInfo(household.timezone))
+    offset = local_now.strftime("%z")
+    children = ", ".join(household.children) or "none recorded"
     blocks: list[dict[str, Any]] = [
         {
             "text": (
                 "Process this school message and return the structured draft."
-                f"\nHousehold: {household_id}\nMessage-ID: {msg.message_id}"
+                f"\nHousehold: {household_id}"
+                f"\nChildren in this household: {children}"
+                f"\nHousehold time zone: {household.timezone}"
+                f" (current UTC offset {offset[:3]}:{offset[3:]})."
+                " Express every deadline, starts_at and ends_at in this time zone"
+                " with that numeric offset; never use 'Z' unless the message says UTC."
+                f"\nToday: {local_now.date().isoformat()}"
+                f"\nMessage-ID: {msg.message_id}"
                 f"\nThread: {msg.thread_id}\nFrom: {msg.sender_email}"
                 f"\nReply-To: {msg.reply_to}\nSubject: {msg.subject}"
                 f"\nReceived: {msg.received_at.isoformat()}\n\n{msg.body}"

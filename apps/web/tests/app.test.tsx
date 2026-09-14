@@ -86,8 +86,11 @@ describe("SchoolSiftApp onboarding", () => {
 });
 
 describe("SchoolSiftApp connections", () => {
-  it("names missing provider env vars and disables connect", () => {
+  it("names missing provider env vars and disables connect", async () => {
     render(<SchoolSiftApp initialBootstrap={bootstrapReady} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
     expect(screen.getByText("GMAIL_CLIENT_ID")).toBeInTheDocument();
     expect(screen.getByText("GMAIL_CLIENT_SECRET")).toBeInTheDocument();
     expect(screen.getByText("OUTLOOK_CLIENT_ID")).toBeInTheDocument();
@@ -110,6 +113,9 @@ describe("SchoolSiftApp connections", () => {
         initialBootstrap={bootstrapConnected}
         onNavigate={onNavigate}
       />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Connect Gmail" }));
     await waitFor(() =>
@@ -135,6 +141,9 @@ describe("SchoolSiftApp connections", () => {
     const { disconnectConnection, getBootstrap } = await api();
     vi.mocked(getBootstrap).mockResolvedValue(bootstrapReady);
     render(<SchoolSiftApp initialBootstrap={bootstrapConnected} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
     await userEvent.click(
       screen.getByRole("button", { name: "Disconnect account" }),
     );
@@ -163,6 +172,9 @@ describe("SchoolSiftApp connections", () => {
     vi.mocked(getBootstrap).mockResolvedValue(bootstrapWithSource);
     render(<SchoolSiftApp initialBootstrap={bootstrapConnected} />);
     await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
+    await userEvent.click(
       screen.getByRole("button", { name: "Sync inbox" }),
     );
     await waitFor(() =>
@@ -184,6 +196,9 @@ describe("SchoolSiftApp connections", () => {
       ],
     });
     render(<SchoolSiftApp initialBootstrap={bootstrapWithSource} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Senders/ }),
+    );
     expect(screen.getByText("office@maplegrove.example")).toBeInTheDocument();
     expect(
       screen.getByText(/reads full message content only for senders you trust/i),
@@ -193,6 +208,9 @@ describe("SchoolSiftApp connections", () => {
     );
     await waitFor(() =>
       expect(confirmSource).toHaveBeenCalledWith("src-1"),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
     );
     expect(await screen.findByText(/Waiting for agent$/)).toBeInTheDocument();
   });
@@ -206,6 +224,9 @@ describe("SchoolSiftApp connections", () => {
     vi.mocked(getBootstrap).mockResolvedValue(bootstrapConnected);
     render(<SchoolSiftApp initialBootstrap={bootstrapWithSource} />);
     await userEvent.click(
+      screen.getByRole("button", { name: /^Senders/ }),
+    );
+    await userEvent.click(
       screen.getByRole("button", { name: "Ignore sender" }),
     );
     await waitFor(() =>
@@ -213,7 +234,7 @@ describe("SchoolSiftApp connections", () => {
     );
   });
 
-  it("shows a reconnect control when reauthorization is required", () => {
+  it("shows a reconnect control when reauthorization is required", async () => {
     render(
       <SchoolSiftApp
         initialBootstrap={{
@@ -223,6 +244,9 @@ describe("SchoolSiftApp connections", () => {
           ],
         }}
       />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
     );
     expect(
       screen.getByRole("button", { name: "Reconnect Gmail" }),

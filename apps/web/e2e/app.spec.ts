@@ -55,6 +55,13 @@ test("onboarding works end to end by keyboard", async ({ page }) => {
   await page.getByLabel("Grade").fill("3");
   await page.getByRole("button", { name: "Add child" }).click();
 
+  await page
+    .getByRole("button", { name: "Connect an inbox" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Connect Gmail" }),
+  ).toBeDisabled();
+  await page.getByText("Server setup details").first().click();
   await expect(page.getByText("GMAIL_CLIENT_ID")).toBeVisible();
 });
 
@@ -62,7 +69,10 @@ test("connection setup is honest after onboarding", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Open SchoolSift" }).click();
   await expect(page).toHaveURL(/\/app/);
+  await page.getByRole("button", { name: /^Accounts/ }).click();
+  await page.getByText("Server setup details").first().click();
   await expect(page.getByText("GMAIL_CLIENT_ID")).toBeVisible();
+  await page.getByText("Server setup details").nth(1).click();
   await expect(page.getByText("OUTLOOK_CLIENT_SECRET")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Connect Gmail" }),
@@ -70,6 +80,7 @@ test("connection setup is honest after onboarding", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Connect Outlook" }),
   ).toBeDisabled();
+  await page.getByRole("button", { name: /^To review/ }).click();
   await expect(page.getByText(/No Action Packets yet/)).toBeVisible();
 });
 

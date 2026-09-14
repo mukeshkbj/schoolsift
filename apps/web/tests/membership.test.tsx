@@ -37,6 +37,13 @@ vi.mock("../lib/api", async () => {
 
 const api = () => import("../lib/api");
 
+const openDrawer = (item: string) => async () => {
+  await userEvent.click(
+    screen.getByRole("button", { name: /Settings/ }),
+  );
+  await userEvent.click(screen.getByRole("menuitem", { name: item }));
+};
+
 const secondMembership = {
   ...ownerMembership,
   household_id: "hh-2",
@@ -109,8 +116,9 @@ describe("household chooser", () => {
 });
 
 describe("caregivers section", () => {
-  it("owner sees members and invite controls", () => {
+  it("owner sees members and invite controls", async () => {
     render(<SchoolSiftApp initialBootstrap={bootstrapReady} />);
+    await openDrawer("Invite caregiver")();
     expect(
       screen.getByRole("heading", { name: "Caregivers" }),
     ).toBeInTheDocument();
@@ -135,6 +143,7 @@ describe("caregivers section", () => {
       token: "one-time-token",
     });
     render(<SchoolSiftApp initialBootstrap={bootstrapReady} />);
+    await openDrawer("Invite caregiver")();
     await userEvent.type(
       screen.getByLabelText("Invite caregiver email"),
       "g@example.com",
@@ -153,11 +162,15 @@ describe("caregivers section", () => {
     expect(screen.getByText(/No email is sent yet/)).toBeInTheDocument();
   });
 
-  it("non-owners do not see caregivers controls", () => {
+  it("non-owners do not see caregivers controls", async () => {
     render(<SchoolSiftApp initialBootstrap={viewerBoot} />);
+    await openDrawer("Household")();
     expect(
-      screen.queryByRole("heading", { name: "Caregivers" }),
+      screen.queryByLabelText("Invite caregiver email"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Only owners manage caregivers/),
+    ).toBeInTheDocument();
   });
 });
 

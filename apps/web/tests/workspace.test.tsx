@@ -38,6 +38,9 @@ describe("SchoolSiftApp message processing", () => {
     vi.mocked(processMessage).mockResolvedValue(packet);
     render(<SchoolSiftApp initialBootstrap={bootstrapAwaitingAgent} />);
     await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
+    await userEvent.click(
       screen.getByRole("button", { name: "Process message" }),
     );
     await waitFor(() =>
@@ -47,8 +50,11 @@ describe("SchoolSiftApp message processing", () => {
     expect(await screen.findByText(packet.summary)).toBeInTheDocument();
   });
 
-  it("shows agent configuration guidance when the agent is unavailable", () => {
+  it("shows agent configuration guidance when the agent is unavailable", async () => {
     render(<SchoolSiftApp initialBootstrap={bootstrapAgentMissing} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
     expect(
       screen.getByText(/Waiting for agent configuration/),
     ).toBeInTheDocument();
@@ -59,8 +65,11 @@ describe("SchoolSiftApp message processing", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the manual review reason for failed messages", () => {
+  it("shows the manual review reason for failed messages", async () => {
     render(<SchoolSiftApp initialBootstrap={bootstrapWithFailedMessage} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Accounts/ }),
+    );
     expect(
       screen.getByText(/exceeds the 25 MB limit/),
     ).toBeInTheDocument();

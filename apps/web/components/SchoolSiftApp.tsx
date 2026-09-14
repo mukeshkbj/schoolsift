@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearSession,
   cognitoConfigured,
@@ -38,24 +38,29 @@ import type {
 } from "../lib/contracts";
 import { headProposals } from "../lib/contracts";
 import ActionPacketView from "./ActionPacket";
+import ChildForm from "./ChildForm";
+import SettingsDrawer, { type SettingsSection } from "./SettingsDrawer";
+import SendersView from "./SendersView";
+import AccountsView from "./AccountsView";
 
 type Props = {
   initialBootstrap?: BootstrapResponse | null;
   onNavigate?: (url: string) => void;
 };
 
-const PROVIDERS = ["gmail", "outlook"] as const;
-type Provider = (typeof PROVIDERS)[number];
+type Provider = "gmail" | "outlook";
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   gmail: "Gmail",
   outlook: "Outlook",
 };
 
-const MISSING_ENV: Record<Provider, string[]> = {
-  gmail: ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"],
-  outlook: ["OUTLOOK_CLIENT_ID", "OUTLOOK_CLIENT_SECRET"],
-};
+const VIEWS = [
+  { key: "review", label: "To review" },
+  { key: "senders", label: "Senders" },
+  { key: "accounts", label: "Accounts" },
+] as const;
+type View = (typeof VIEWS)[number]["key"];
 
 export default function SchoolSiftApp({
   initialBootstrap = null,
@@ -63,6 +68,7 @@ export default function SchoolSiftApp({
 }: Props) {
   const [boot, setBoot] = useState<BootstrapResponse | null>(initialBootstrap);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<View>("review");
   const [loading, setLoading] = useState(initialBootstrap === null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -70,6 +76,11 @@ export default function SchoolSiftApp({
   const [conflicts, setConflicts] = useState<Record<string, string>>({});
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -92,11 +103,41 @@ export default function SchoolSiftApp({
     const connected = params.get("connected");
     if (connected === "gmail" || connected === "outlook") {
       setConnectedNote(`${PROVIDER_LABEL[connected]} account connected.`);
+      setView("accounts");
       params.delete("connected");
       const next = params.size > 0 ? `?${params}` : window.location.pathname;
       window.history.replaceState(null, "", next);
     }
   }, [initialBootstrap, refresh]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const items = menuRef.current?.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]',
+    );
+    items?.[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
+        return;
+      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const all = menuRef.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"]',
+      );
+      if (!all || all.length === 0) return;
+      const idx = [...all].indexOf(document.activeElement as HTMLElement);
+      const next =
+        e.key === "ArrowDown"
+          ? (idx + 1) % all.length
+          : (idx - 1 + all.length) % all.length;
+      all[next]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   async function run(mutate: () => Promise<unknown>, key: string) {
     setBusyKey(key);
@@ -145,16 +186,34 @@ export default function SchoolSiftApp({
       `notifications:${connectionId}`,
     );
 
-  const onConfirmSource = (sourceId: string) =>
-    run(() => confirmSource(sourceId), `source-confirm:${sourceId}`);
+  const onSource = (sourceId: string, action: "confirm" | "reject") =>
+    run(
+      () =>
+        action === "confirm"
+          ? confirmSource(sourceId)
+          : rejectSource(sourceId),
+      `source-${action}:${sourceId}`,
+    );
 
-  const onRejectSource = (sourceId: string) =>
-    run(() => rejectSource(sourceId), `source-reject:${sourceId}`);
+  const onBulkSources = (
+    action: "confirm" | "reject",
+    ids: string[],
+    onProgress: (done: number) => void,
+  ) =>
+    run(async () => {
+      let done = 0;
+      for (const id of ids) {
+        if (action === "confirm") await confirmSource(id);
+        else await rejectSource(id);
+        onProgress(++done);
+      }
+    }, "bulk-sources");
 
   const onProcess = (messageId: string) =>
     run(async () => {
       const packet = await processMessage(messageId);
       setSelectedId(packet.id);
+      setView("review");
     }, `process:${messageId}`);
 
   const onSave = (v: ProposalVersion, payload: ProposalPayload) =>
@@ -188,6 +247,9 @@ export default function SchoolSiftApp({
       setActiveHousehold(res.membership.household_id);
     }, "accept-invite");
 
+  const onAddChild = (name: string, school: string, grade: string) =>
+    run(() => addChild(name, school, grade), "child");
+
   const onInvite = (email: string, role: "editor" | "viewer") =>
     run(async () => {
       const res = await createInvitation(email, role);
@@ -212,13 +274,31 @@ export default function SchoolSiftApp({
     onNavigate(signOutUrl());
   };
 
+  const openSettings = (section: SettingsSection) => {
+    setMenuOpen(false);
+    setSettingsSection(section);
+  };
+
+  const closeSettings = useCallback(() => {
+    setSettingsSection(null);
+    menuButtonRef.current?.focus();
+  }, []);
+
   const packets = boot?.packets ?? [];
   const executions = boot?.executions ?? [];
   const connections = boot?.connections ?? [];
   const sources = boot?.sources ?? [];
   const messages = boot?.messages ?? [];
-  const suggestedSources = sources.filter((s) => s.status === "suggested");
+  const suggestedCount = sources.filter((s) => s.status === "suggested").length;
   const confirmedCount = sources.filter((s) => s.status === "confirmed").length;
+  const pendingCount = packets.reduce(
+    (n, p) =>
+      n + headProposals(p).filter((v) => v.status === "proposed").length,
+    0,
+  );
+  const awaitingCount = messages.filter(
+    (m) => m.status === "awaiting_agent",
+  ).length;
   const selected = packets.find((p) => p.id === selectedId);
   const activeMembership =
     boot?.memberships.find(
@@ -227,13 +307,14 @@ export default function SchoolSiftApp({
   const role = activeMembership?.role ?? "owner";
   const canEdit = role !== "viewer";
   const isOwner = role === "owner";
+  const hasHousehold = boot !== null && boot.household !== null;
 
-  const MESSAGE_STATUS: Record<string, string> = {
-    awaiting_source: "Waiting for sender review",
-    awaiting_agent: "Waiting for agent",
-    processed: "Processed",
-    failed: "Needs manual review",
-  };
+  const processAwaiting = () =>
+    run(async () => {
+      for (const m of messages.filter((x) => x.status === "awaiting_agent")) {
+        await processMessage(m.id);
+      }
+    }, "process-all");
 
   return (
     <div className="app-shell">
@@ -242,6 +323,80 @@ export default function SchoolSiftApp({
           <span className="app-wordmark">SchoolSift</span>
           <span className="app-mode">{boot?.mode ?? "local"} mode</span>
         </div>
+        {hasHousehold && (
+          <div className="app-topbar-actions">
+            <nav className="view-nav" aria-label="Views">
+              {VIEWS.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  className={`nav-btn${view === v.key ? " is-active" : ""}`}
+                  aria-current={view === v.key ? "page" : undefined}
+                  onClick={() => setView(v.key)}
+                >
+                  {v.label}
+                  {v.key === "review" && pendingCount > 0
+                    ? ` (${pendingCount})`
+                    : v.key === "senders" && suggestedCount > 0
+                      ? ` (${suggestedCount})`
+                      : ""}
+                </button>
+              ))}
+            </nav>
+            <div className="settings-menu">
+              <button
+                type="button"
+                ref={menuButtonRef}
+                className="btn btn-quiet"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMenuOpen(true);
+                  }
+                }}
+              >
+                Settings ▾
+              </button>
+              {menuOpen && (
+                <div
+                  className="settings-menu-list"
+                  role="menu"
+                  aria-label="Settings"
+                  ref={menuRef}
+                >
+                  {canEdit && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => openSettings("children")}
+                    >
+                      Add child
+                    </button>
+                  )}
+                  {isOwner && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => openSettings("caregivers")}
+                    >
+                      Invite caregiver
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openSettings("household")}
+                  >
+                    Household
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {cognitoConfigured() && (
           <button
             type="button"
@@ -341,488 +496,194 @@ export default function SchoolSiftApp({
             SchoolSift uses names, schools, and grades to match incoming mail to
             the right kid.
           </p>
-          <form
-            className="setup-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              void run(
-                () =>
-                  addChild(
-                    String(fd.get("name") ?? ""),
-                    String(fd.get("school") ?? ""),
-                    String(fd.get("grade") ?? ""),
-                  ),
-                "child",
-              );
-            }}
-          >
-            <label className="field">
-              <span className="field-label">Child name</span>
-              <input name="name" type="text" required autoComplete="off" />
-            </label>
-            <label className="field">
-              <span className="field-label">School</span>
-              <input name="school" type="text" required autoComplete="off" />
-            </label>
-            <label className="field">
-              <span className="field-label">Grade</span>
-              <input name="grade" type="text" required autoComplete="off" />
-            </label>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={busyKey === "child"}
-              aria-busy={busyKey === "child"}
-            >
-              Add child
-              {busyKey === "child" && (
-                <span className="btn-busy" aria-hidden="true" />
-              )}
-            </button>
-          </form>
+          <ChildForm busy={busyKey === "child"} onAdd={onAddChild} />
         </section>
       ) : (
-        <div className="workspace">
-          <nav className="inbox-rail" aria-label="Action packets">
-            <h2 className="rail-heading">Action Packets</h2>
-            {packets.length === 0 ? (
-              <p className="rail-empty">
-                Nothing to review yet — packets appear after a connected inbox
-                syncs school mail.
-              </p>
-            ) : (
-              <ol className="rail-list">
-                {packets.map((p) => {
-                  const pending = headProposals(p).filter(
-                    (v) => v.status === "proposed",
-                  ).length;
-                  return (
-                    <li key={p.id} className="rail-item">
-                      <span className="sift-mark" aria-hidden="true" />
-                      <button
-                        type="button"
-                        className={`rail-message${p.id === selectedId ? " is-selected" : ""}`}
-                        onClick={() => setSelectedId(p.id)}
-                        aria-current={p.id === selectedId ? "true" : undefined}
-                      >
-                        <span className="rail-sender">{p.sender}</span>
-                        <span className="rail-subject">{p.subject}</span>
-                        <span className="rail-meta">
-                          {pending > 0
-                            ? `${pending} proposal${pending === 1 ? "" : "s"} to review`
-                            : p.information_only
-                              ? "Information only"
-                              : "Decided"}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </nav>
-
-          <section className="packet-pane" aria-label="Action packet detail">
-            {selected === undefined ? (
-              <div className="packet-placeholder">
-                <p>
-                  {packets.length === 0
-                    ? "No Action Packets yet."
-                    : "Select a packet to review it."}
-                </p>
-              </div>
-            ) : (
-              <ActionPacketView
-                packet={selected}
-                executions={executions}
-                localMode={boot.mode === "local"}
-                busyKey={busyKey}
-                conflicts={conflicts}
-                readOnly={!canEdit}
-                onSave={onSave}
-                onApprove={onApprove}
-                onReject={onReject}
-                onReload={refresh}
-                onDispatch={onDispatch}
-                onRun={onRun}
-              />
-            )}
-          </section>
-
-          <aside className="accounts-pane" aria-label="School accounts">
-            <h2 className="rail-heading">School accounts</h2>
-            {PROVIDERS.some((p) => !boot.capabilities[p]) && (
-              <div className="setup-card">
-                <p>
-                  Inbox connection isn&apos;t configured yet. Set these
-                  environment variables on the API, then restart it:
-                </p>
-                <ul className="setup-env-list">
-                  {PROVIDERS.filter((p) => !boot.capabilities[p]).map((p) => (
-                    <li key={p}>
-                      {MISSING_ENV[p].map((v) => (
-                        <code key={v}>{v}</code>
-                      ))}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="connect-actions">
-              {canEdit &&
-                PROVIDERS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={!boot.capabilities[p] || busyKey !== null}
-                  aria-busy={busyKey === `connect:${p}`}
-                  onClick={() => onConnect(p)}
-                >
-                  Connect {PROVIDER_LABEL[p]}
-                  {busyKey === `connect:${p}` && (
-                    <span className="btn-busy" aria-hidden="true" />
-                  )}
-                </button>
-                ))}
-            </div>
-            {connectedNote !== null && (
-              <p role="status" className="connect-note">
-                {connectedNote}
-              </p>
-            )}
-            {connections.length > 0 ? (
-              <ol className="connection-list">
-                {connections.map((c) => (
-                  <li key={c.id} className="connection-item">
-                    <span className="connection-email">{c.email}</span>
-                    <span className="connection-meta">
-                      {PROVIDER_LABEL[c.provider]} ·{" "}
-                      {c.status.replaceAll("_", " ")}
-                      {c.sync_status === "failed"
-                        ? " · sync failed"
-                        : c.sync_status === "ready"
-                          ? ""
-                          : c.sync_status !== "idle"
-                            ? ` · ${c.sync_status.replaceAll("_", " ")}`
-                            : ""}
-                      {c.last_sync_at
-                        ? ` · synced ${new Date(c.last_sync_at).toLocaleString()}`
-                        : " · not synced yet"}
-                      {c.subscription?.status === "active"
-                        ? ` · notifications on${
-                            c.subscription.expires_at
-                              ? ` until ${new Date(
-                                  c.subscription.expires_at,
-                                ).toLocaleString()}`
-                              : ""
-                          }`
-                        : ""}
-                    </span>
-                    {c.status === "connected" &&
-                      canEdit &&
-                      c.subscription === null && (
+        <>
+          {view === "review" && (
+            <div className="workspace">
+              <nav className="inbox-rail" aria-label="Action packets">
+                <h2 className="rail-heading">What needs you</h2>
+                {packets.length === 0 ? (
+                  <div className="rail-empty">
+                    {connections.length === 0 ? (
+                      <>
+                        <p>Connect Gmail or Outlook to start reading school mail.</p>
                         <button
                           type="button"
                           className="btn btn-secondary"
-                          disabled={busyKey === `notifications:${c.id}`}
-                          aria-busy={busyKey === `notifications:${c.id}`}
-                          onClick={() => void onNotifications(c.id)}
+                          onClick={() => setView("accounts")}
                         >
-                          Enable notifications
-                          {busyKey === `notifications:${c.id}` && (
-                            <span className="btn-busy" aria-hidden="true" />
-                          )}
+                          Connect an inbox
                         </button>
-                      )}
-                    {c.status === "connected" &&
-                      canEdit &&
-                      c.subscription !== null &&
-                      c.subscription.status !== "active" && (
+                      </>
+                    ) : confirmedCount === 0 && suggestedCount > 0 ? (
+                      <>
+                        <p>
+                          Choose which senders are your school —{" "}
+                          {suggestedCount} waiting.
+                        </p>
                         <button
                           type="button"
                           className="btn btn-secondary"
-                          disabled={busyKey === `notifications:${c.id}`}
-                          aria-busy={busyKey === `notifications:${c.id}`}
-                          onClick={() => void onNotifications(c.id)}
+                          onClick={() => setView("senders")}
                         >
-                          Renew notifications
-                          {busyKey === `notifications:${c.id}` && (
-                            <span className="btn-busy" aria-hidden="true" />
-                          )}
+                          Review senders
                         </button>
-                      )}
-                    {c.status === "reauthorization_required" && canEdit && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={
-                          !boot.capabilities[c.provider] || busyKey !== null
-                        }
-                        onClick={() => onConnect(c.provider)}
-                      >
-                        Reconnect {PROVIDER_LABEL[c.provider]}
-                      </button>
-                    )}
-                    {c.status === "connected" && canEdit && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={busyKey === `sync:${c.id}`}
-                        aria-busy={busyKey === `sync:${c.id}`}
-                        onClick={() => void onSync(c.id)}
-                      >
-                        Sync inbox
-                        {busyKey === `sync:${c.id}` && (
-                          <span className="btn-busy" aria-hidden="true" />
-                        )}
-                      </button>
-                    )}
-                    {canEdit && (
-                    <button
-                      type="button"
-                      className="btn btn-quiet"
-                      disabled={busyKey === `disconnect:${c.id}`}
-                      aria-busy={busyKey === `disconnect:${c.id}`}
-                      onClick={() => void onDisconnect(c.id)}
-                    >
-                      Disconnect account
-                      {busyKey === `disconnect:${c.id}` && (
-                        <span className="btn-busy" aria-hidden="true" />
-                      )}
-                    </button>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="connection-empty">
-                No accounts connected. School mail stays untouched until you
-                connect one.
-              </p>
-            )}
-            {connections.length > 0 && packets.length === 0 && (
-              <p className="connection-empty">
-                Connected — press Sync inbox to look for school mail.
-              </p>
-            )}
-            {suggestedSources.length > 0 && (
-              <section
-                className="source-review"
-                aria-label="Review school senders"
-              >
-                <h3 className="source-heading">Review school senders</h3>
-                <p className="connection-empty">
-                  SchoolSift reads full message content only for senders you
-                  trust. Everything else stays headers-only.
-                </p>
-                <ol className="connection-list">
-                  {suggestedSources.map((s) => (
-                    <li key={s.id} className="connection-item">
-                      <span className="connection-email">{s.sender_email}</span>
-                      <span className="connection-meta">{s.sender_domain}</span>
-                      {canEdit && (
-                      <div className="source-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busyKey === `source-confirm:${s.id}`}
-                          aria-busy={busyKey === `source-confirm:${s.id}`}
-                          onClick={() => void onConfirmSource(s.id)}
-                        >
-                          Trust sender
-                          {busyKey === `source-confirm:${s.id}` && (
-                            <span className="btn-busy" aria-hidden="true" />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-quiet"
-                          disabled={busyKey === `source-reject:${s.id}`}
-                          aria-busy={busyKey === `source-reject:${s.id}`}
-                          onClick={() => void onRejectSource(s.id)}
-                        >
-                          Ignore sender
-                          {busyKey === `source-reject:${s.id}` && (
-                            <span className="btn-busy" aria-hidden="true" />
-                          )}
-                        </button>
-                      </div>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-            {suggestedSources.length === 0 && confirmedCount > 0 && (
-              <p className="connection-empty">
-                {confirmedCount} trusted sender
-                {confirmedCount === 1 ? "" : "s"}.
-              </p>
-            )}
-            {messages.length > 0 && (
-              <section className="source-review" aria-label="Inbox status">
-                <h3 className="source-heading">Inbox</h3>
-                <ol className="connection-list">
-                  {messages.map((m) => (
-                    <li key={m.id} className="connection-item">
-                      <span className="connection-email">{m.subject}</span>
-                      <span className="connection-meta">
-                        {m.sender_email} ·{" "}
-                        {MESSAGE_STATUS[m.status] ?? m.status}
-                      </span>
-                      {m.status === "failed" &&
-                        m.manual_review_reason !== null && (
-                          <span className="connection-meta">
-                            {m.manual_review_reason}
-                          </span>
-                        )}
-                      {m.status === "awaiting_agent" &&
-                        (boot.capabilities.agent && canEdit ? (
+                      </>
+                    ) : awaitingCount > 0 ? (
+                      <>
+                        <p>{awaitingCount} school messages ready.</p>
+                        {boot.capabilities.agent && canEdit ? (
                           <button
                             type="button"
                             className="btn btn-secondary"
-                            disabled={busyKey === `process:${m.id}`}
-                            aria-busy={busyKey === `process:${m.id}`}
-                            onClick={() => void onProcess(m.id)}
+                            disabled={busyKey === "process-all"}
+                            aria-busy={busyKey === "process-all"}
+                            onClick={() => void processAwaiting()}
                           >
-                            Process message
-                            {busyKey === `process:${m.id}` && (
+                            Process messages
+                            {busyKey === "process-all" && (
                               <span className="btn-busy" aria-hidden="true" />
                             )}
                           </button>
                         ) : (
-                          <span className="connection-meta">
+                          <p className="connection-meta">
                             Waiting for agent configuration — set{" "}
                             <code>SCHOOLSIFT_AWS_REGION</code> and{" "}
                             <code>SCHOOLSIFT_BEDROCK_MODEL_ID</code> on the API.
-                          </span>
-                        ))}
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-            {isOwner && (
-              <section className="source-review" aria-label="Caregivers">
-                <h3 className="source-heading">Caregivers</h3>
-                <ol className="connection-list">
-                  {boot.members.map((m) => (
-                    <li key={m.user_id} className="connection-item">
-                      <span className="connection-email">{m.email}</span>
-                      <span className="connection-meta">{m.role}</span>
-                      <div className="source-actions">
-                        <label className="field member-role">
-                          <span className="field-label">Role</span>
-                          <select
-                            value={m.role}
-                            disabled={busyKey === `role:${m.user_id}`}
-                            onChange={(e) =>
-                              void onChangeRole(m.user_id, e.target.value)
-                            }
-                          >
-                            <option value="owner">owner</option>
-                            <option value="editor">editor</option>
-                            <option value="viewer">viewer</option>
-                          </select>
-                        </label>
+                          </p>
+                        )}
+                      </>
+                    ) : messages.length === 0 && sources.length === 0 ? (
+                      <>
+                        <p>
+                          Connected — press Sync inbox to look for school
+                          mail.
+                        </p>
                         <button
                           type="button"
-                          className="btn btn-quiet"
-                          disabled={busyKey === `remove:${m.user_id}`}
-                          onClick={() => void onRemoveMember(m.user_id)}
+                          className="btn btn-secondary"
+                          onClick={() => setView("accounts")}
                         >
-                          Remove
+                          Go to Accounts
                         </button>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                <form
-                  className="setup-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const fd = new FormData(e.currentTarget);
-                    void onInvite(
-                      String(fd.get("email") ?? ""),
-                      fd.get("role") === "editor" ? "editor" : "viewer",
-                    );
-                    e.currentTarget.reset();
-                  }}
-                >
-                  <label className="field">
-                    <span className="field-label">Invite caregiver email</span>
-                    <input name="email" type="email" required />
-                  </label>
-                  <label className="field">
-                    <span className="field-label">Role</span>
-                    <select name="role" defaultValue="editor">
-                      <option value="editor">editor</option>
-                      <option value="viewer">viewer</option>
-                    </select>
-                  </label>
-                  <button
-                    type="submit"
-                    className="btn btn-secondary"
-                    disabled={busyKey === "invite"}
-                    aria-busy={busyKey === "invite"}
-                  >
-                    Create invite
-                  </button>
-                </form>
-                {inviteToken !== null && (
-                  <div className="invite-token-box">
-                    <p className="connection-meta">
-                      No email is sent yet — copy this invite link text and
-                      share it with the caregiver. It is shown only once.
-                    </p>
-                    <input
-                      readOnly
-                      className="invite-token"
-                      value={inviteToken}
-                      aria-label="Invitation token"
-                      onFocus={(e) => e.currentTarget.select()}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        void navigator.clipboard
-                          ?.writeText(inviteToken)
-                          .then(() => setInviteCopied(true));
-                      }}
-                    >
-                      {inviteCopied ? "Copied" : "Copy invite"}
-                    </button>
+                      </>
+                    ) : (
+                      <p>
+                        Nothing to review yet — packets appear after a
+                        connected inbox syncs school mail.
+                      </p>
+                    )}
                   </div>
-                )}
-                {boot.invitations.length > 0 && (
-                  <ol className="connection-list">
-                    {boot.invitations.map((i) => (
-                      <li key={i.id} className="connection-item">
-                        <span className="connection-email">{i.email}</span>
-                        <span className="connection-meta">
-                          {i.role} · {i.status}
-                        </span>
-                        {i.status === "pending" && (
+                ) : (
+                  <ol className="rail-list">
+                    {packets.map((p) => {
+                      const pending = headProposals(p).filter(
+                        (v) => v.status === "proposed",
+                      ).length;
+                      return (
+                        <li key={p.id} className="rail-item">
+                          <span className="sift-mark" aria-hidden="true" />
                           <button
                             type="button"
-                            className="btn btn-quiet"
-                            disabled={busyKey === `revoke:${i.id}`}
-                            onClick={() => void onRevokeInvite(i.id)}
+                            className={`rail-message${p.id === selectedId ? " is-selected" : ""}`}
+                            onClick={() => setSelectedId(p.id)}
+                            aria-current={p.id === selectedId ? "true" : undefined}
                           >
-                            Revoke invite
+                            <span className="rail-sender">{p.sender}</span>
+                            <span className="rail-subject">{p.subject}</span>
+                            <span className="rail-meta">
+                              {pending > 0
+                                ? `${pending} proposal${pending === 1 ? "" : "s"} to review`
+                                : p.information_only
+                                  ? "Information only"
+                                  : "Decided"}
+                            </span>
                           </button>
-                        )}
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ol>
                 )}
+              </nav>
+
+              <section className="packet-pane" aria-label="Action packet detail">
+                {selected === undefined ? (
+                  <div className="packet-placeholder">
+                    <p>
+                      {packets.length === 0
+                        ? "No Action Packets yet."
+                        : "Select a packet to review it."}
+                    </p>
+                  </div>
+                ) : (
+                  <ActionPacketView
+                    packet={selected}
+                    executions={executions}
+                    localMode={boot.mode === "local"}
+                    busyKey={busyKey}
+                    conflicts={conflicts}
+                    readOnly={!canEdit}
+                    onSave={onSave}
+                    onApprove={onApprove}
+                    onReject={onReject}
+                    onReload={refresh}
+                    onDispatch={onDispatch}
+                    onRun={onRun}
+                  />
+                )}
               </section>
-            )}
-          </aside>
-        </div>
+            </div>
+          )}
+
+          {view === "senders" && (
+            <div className="view-pane view-pane--wide">
+              <SendersView
+                sources={sources}
+                canEdit={canEdit}
+                busyKey={busyKey}
+                onSource={onSource}
+                onBulkSources={onBulkSources}
+              />
+            </div>
+          )}
+
+          {view === "accounts" && (
+            <div className="view-pane">
+              <AccountsView
+                boot={boot}
+                canEdit={canEdit}
+                busyKey={busyKey}
+                connectedNote={connectedNote}
+                onConnect={onConnect}
+                onSync={onSync}
+                onDisconnect={onDisconnect}
+                onNotifications={onNotifications}
+                onProcess={onProcess}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {settingsSection !== null && boot !== null && (
+        <SettingsDrawer
+          boot={boot}
+          canEdit={canEdit}
+          isOwner={isOwner}
+          busyKey={busyKey}
+          inviteToken={inviteToken}
+          inviteCopied={inviteCopied}
+          section={settingsSection}
+          onClose={closeSettings}
+          onAddChild={onAddChild}
+          onInvite={onInvite}
+          onRevokeInvite={onRevokeInvite}
+          onChangeRole={onChangeRole}
+          onRemoveMember={onRemoveMember}
+          onInviteCopied={() => setInviteCopied(true)}
+        />
       )}
     </div>
   );

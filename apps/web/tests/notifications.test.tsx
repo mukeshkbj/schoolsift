@@ -43,9 +43,13 @@ const boot = (over: Partial<BootstrapResponse> = {}): BootstrapResponse => ({
   ...over,
 });
 
+const goAccounts = () =>
+  userEvent.click(screen.getByRole("button", { name: /^Accounts/ }));
+
 describe("notification controls", () => {
   it("offers Enable notifications when no subscription exists", async () => {
     render(<SchoolSiftApp initialBootstrap={boot()} />);
+    await goAccounts();
     const enable = await screen.findByRole("button", {
       name: "Enable notifications",
     });
@@ -78,6 +82,7 @@ describe("notification controls", () => {
         })}
       />,
     );
+    await goAccounts();
     expect(
       await screen.findByRole("button", { name: "Renew notifications" }),
     ).toBeInTheDocument();
@@ -100,6 +105,7 @@ describe("notification controls", () => {
         })}
       />,
     );
+    await goAccounts();
     await screen.findByText("caregiver@example.com");
     expect(screen.getByText(/notifications on/)).toBeInTheDocument();
     expect(
@@ -113,6 +119,7 @@ describe("notification controls", () => {
         initialBootstrap={boot({ memberships: [viewerMembership] })}
       />,
     );
+    await goAccounts();
     await screen.findByText("caregiver@example.com");
     expect(
       screen.queryByRole("button", { name: /notifications/i }),
@@ -132,6 +139,7 @@ describe("notification controls", () => {
       ),
     );
     render(<SchoolSiftApp initialBootstrap={boot()} />);
+    await goAccounts();
     await userEvent.click(
       await screen.findByRole("button", { name: "Enable notifications" }),
     );

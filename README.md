@@ -17,9 +17,13 @@ against an empty SQLite database with the same code paths. There is no
 demo mode, no seeded inbox, and no fake provider result anywhere in the
 runtime. Test fixtures live only under `backend/tests/` and `apps/web/tests/`.
 
-> Status: the AWS stack synthesizes and every adapter is tested offline, but
-> nothing has been deployed and no live Gmail, Microsoft Graph, Bedrock, or
-> Cognito call has been made from this code yet. See [What is not done](#what-is-not-done).
+> Status: tested end to end on a real Gmail inbox. A parent's account was
+> connected through Google OAuth, 3,000 message headers synced, the school's
+> senders trusted, and nine real school emails (with PDF letters) analysed by
+> the Strands agent on Amazon Bedrock into Action Packets with draft replies,
+> calendar proposals, and escalations. The AWS stack (KMS, S3, DynamoDB, SQS,
+> Cognito, ECR, AgentCore runtime) is deployed; the API and workers still run
+> locally against SQLite. See [What is not done](#what-is-not-done).
 
 ## Architecture
 
@@ -149,8 +153,9 @@ scripts/                  verify_no_secrets.py, archify_to_excalidraw.py
 
 ## Deploying to AWS
 
-Not yet exercised against a real account. The stack in
-`infra/lib/schoolsift-stack.ts` defines: a KMS key; the raw-content S3
+The stack in `infra/lib/schoolsift-stack.ts` is deployed to a real account
+in `us-east-1` (base infrastructure plus the AgentCore runtime by direct
+code deployment). It defines: a KMS key; the raw-content S3
 bucket with 30-day expiry; the DynamoDB state table; ingestion and execution
 SQS FIFO queues with dead-letter queues; the Cognito user pool and PKCE app
 client; ECR repositories and log groups for the API and workers; an
@@ -168,10 +173,24 @@ Prerequisites you must provide outside this repository:
 - A Microsoft Entra app registration with `Mail.Read`, `Mail.Send`, and
   `Calendars.ReadWrite` delegated permissions and the callback URL.
 - Bedrock model access in `SCHOOLSIFT_AWS_REGION` for
-  `SCHOOLSIFT_BEDROCK_MODEL_ID`.
+  `SCHOOLSIFT_BEDROCK_MODEL_ID`. Use a cross-region inference profile id
+  (for example `us.anthropic.claude-haiku-4-5-20251001-v1:0`); bare model
+  ids are rejected for on-demand use. New accounts must also submit the
+  one-time Anthropic use-case form (`aws bedrock put-use-case-for-model-access`).
 
-Then `pnpm infra:synth` to check the template and `cdk deploy` from
-`infra/`. `SCHOOLSIFT_ENVIRONMENT=aws` refuses to start unless Cognito,
+Deploy in two steps from `infra/`:
+
+```bash
+npx cdk bootstrap aws://<account>/us-east-1
+npx cdk deploy -c includeAgentRuntime=false -c cognitoDomainPrefix=schoolsift-<account>
+
+bash ../scripts/build_agentcore_package.sh          # aarch64 zip in dist/
+aws s3 cp ../dist/agentcore-package.zip s3://<bucket>/schoolsift/agentcore/package.zip
+npx cdk deploy -c cognitoDomainPrefix=schoolsift-<account> \
+  --parameters AgentCodeBucket=<bucket> \
+  --parameters AgentCodePrefix=schoolsift/agentcore/package.zip \
+  --parameters AgentCodeVersionId=<s3 version id>
+``` `SCHOOLSIFT_ENVIRONMENT=aws` refuses to start unless Cognito,
 Bedrock, the Gmail push settings, and an HTTPS public API URL are all
 configured.
 
@@ -195,11 +214,14 @@ configured.
 
 ## What is not done
 
-- No AWS resources have been created, and no live Gmail, Graph, Bedrock,
-  Cognito, or AgentCore call has been made. Provider adapters are tested
-  against recorded request shapes with `httpx.MockTransport`.
+- Live-tested so far: Gmail OAuth, header sync, content import, Bedrock
+  analysis, approval. Not yet exercised against a real account: sending an
+  approved reply, creating a calendar event, Microsoft Graph, Cognito sign-in,
+  and invoking the deployed AgentCore runtime (it needs a Cognito token and an
+  AWS-backed data source). Those adapters are tested against recorded request
+  shapes with `httpx.MockTransport`.
 - The DynamoDB-backed `SchoolSiftStore` is not wired; SQLite is the active
-  store in both modes today.
+  store in both modes today, so the API and workers run locally.
 - API and worker container images are not built or published; the ECR
   repositories and log groups exist in the stack for them.
 - EventBridge schedules for subscription renewal and content retention are

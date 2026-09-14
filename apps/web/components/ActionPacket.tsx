@@ -5,6 +5,7 @@ import type {
   ProposalVersion,
 } from "../lib/contracts";
 import { headProposals } from "../lib/contracts";
+import { formatInZone } from "../lib/dates";
 import ProposalReview from "./ProposalReview";
 
 type Props = {
@@ -17,6 +18,7 @@ type Props = {
   onSave: (version: ProposalVersion, payload: ProposalPayload) => Promise<void>;
   onApprove: (version: ProposalVersion) => Promise<void>;
   onReject: (version: ProposalVersion) => Promise<void>;
+  timeZone?: string;
   onReload: () => Promise<void>;
   onReanalyze?: (messageId: string) => Promise<void>;
   onDispatch?: () => Promise<void>;
@@ -24,14 +26,6 @@ type Props = {
 };
 
 const URGENCY_LABEL = { none: "No rush", soon: "Soon", urgent: "Urgent" };
-
-function fmtDate(iso: string | null): string | null {
-  if (iso === null) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
 
 export default function ActionPacketView({
   packet,
@@ -46,12 +40,14 @@ export default function ActionPacketView({
   onReanalyze,
   onDispatch,
   onRun,
+  timeZone,
   readOnly = false,
 }: Props) {
   const heads = headProposals(packet);
   const executionFor = (proposalId: string) =>
     executions.find((e) => e.proposal_id === proposalId) ?? null;
-  const deadline = fmtDate(packet.deadline);
+  const deadline =
+    packet.deadline === null ? null : formatInZone(packet.deadline, timeZone);
 
   return (
     <article className="packet">
@@ -147,6 +143,7 @@ export default function ActionPacketView({
               version={v}
               execution={executionFor(v.id)}
               localMode={localMode}
+              timeZone={timeZone}
               busyKey={busyKey}
               conflict={conflicts[`${v.id}:approve`] ?? conflicts[`${v.id}:edit`] ?? conflicts[`${v.id}:reject`] ?? null}
               readOnly={readOnly}

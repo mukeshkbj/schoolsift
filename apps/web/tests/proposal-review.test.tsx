@@ -118,6 +118,17 @@ describe("ProposalReview execution", () => {
     ).toBeInTheDocument();
   });
 
+  it("in local mode states that approving only queues the email", () => {
+    render(
+      <ProposalReview {...baseProps} version={replyVersion} localMode />,
+    );
+    expect(
+      screen.getByText(
+        /Approving queues this email to .*nothing is sent until you run the approved action/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows each execution status distinctly", () => {
     const labels: Record<string, RegExp> = {
       pending_dispatch: /Pending — approved but not yet dispatched/,

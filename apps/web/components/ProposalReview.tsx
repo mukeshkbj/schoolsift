@@ -9,12 +9,14 @@ import type {
   ProposalVersion,
   ReplyPayload,
 } from "../lib/contracts";
+import { formatRangeInZone } from "../lib/dates";
 
 type Props = {
   readOnly?: boolean;
   version: ProposalVersion;
   execution?: ExecutionRecord | null;
   localMode?: boolean;
+  timeZone?: string;
   busyKey: string | null;
   conflict: string | null;
   onSave: (version: ProposalVersion, payload: ProposalPayload) => Promise<void>;
@@ -54,8 +56,23 @@ const EXECUTION_LABEL: Record<string, string> = {
     "Delivery uncertain — the provider may have completed it; it will not be retried automatically.",
 };
 
-function approvalConsequence(version: ProposalVersion): string {
+function approvalConsequence(
+  version: ProposalVersion,
+  localMode: boolean,
+): string {
   const payload = version.payload;
+  if (localMode) {
+    if (payload.kind === "reply") {
+      return `Approving queues this email to ${payload.recipient}; nothing is sent until you run the approved action.`;
+    }
+    if (payload.kind === "calendar") {
+      return "Approving queues this calendar event; nothing is created until you run the approved action.";
+    }
+    if (payload.kind === "pdf_form") {
+      return `Approving queues filling ${payload.document_name} and emailing it to ${payload.recipient}; nothing is sent until you run the approved action.`;
+    }
+    return "Approving queues this action; nothing happens until you run it.";
+  }
   if (payload.kind === "reply") {
     return `Approving will send this email to ${payload.recipient}.`;
   }
@@ -95,6 +112,7 @@ export default function ProposalReview({
   version,
   execution = null,
   localMode = false,
+  timeZone,
   busyKey,
   conflict,
   onSave,
@@ -210,6 +228,20 @@ export default function ProposalReview({
               />
             </label>
           </div>
+          {formatRangeInZone(
+            (draft as CalendarPayload).starts_at,
+            (draft as CalendarPayload).ends_at,
+            timeZone,
+          ) !== null && (
+            <p className="field-note">
+              In your household time zone:{" "}
+              {formatRangeInZone(
+                (draft as CalendarPayload).starts_at,
+                (draft as CalendarPayload).ends_at,
+                timeZone,
+              )}
+            </p>
+          )}
         </div>
       )}
 
@@ -306,7 +338,7 @@ export default function ProposalReview({
               <p className="dirty-note">{DIRTY_NOTE[version.payload.kind]}</p>
             )}
             <p className="field-note approve-consequence">
-              {approvalConsequence(version)}
+              {approvalConsequence(version, localMode)}
             </p>
           </>
         )}

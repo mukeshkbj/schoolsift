@@ -17,6 +17,26 @@ export default function Landing() {
           calendar event — so a busy parent only ever has to decide. Nothing is
           sent or scheduled without your approval.
         </p>
+        <ol className="landing-steps">
+          <li className="landing-step">
+            <span className="landing-step-num" aria-hidden="true">1</span>
+            Connect your school inboxes — Gmail, Outlook, as many as you
+            need.
+          </li>
+          <li className="landing-step">
+            <span className="landing-step-num" aria-hidden="true">2</span>
+            Trust the senders that are your school; everything else stays
+            headers-only.
+          </li>
+          <li className="landing-step">
+            <span className="landing-step-num" aria-hidden="true">3</span>
+            Review what needs you — summary, evidence, deadline, a draft
+            reply or calendar event. You approve before anything is sent.
+          </li>
+        </ol>
+        <p className="landing-safety">
+          Payments and signatures are never automated.
+        </p>
         <div className="landing-sift" aria-hidden="true">
           <span className="sift-node" />
           <span className="sift-line" />

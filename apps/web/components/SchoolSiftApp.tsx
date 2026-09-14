@@ -52,6 +52,12 @@ type Props = {
 
 type Provider = "gmail" | "outlook";
 
+function railSenderParts(raw: string): { name: string; addr: string } {
+  const m = /^(.*?)\s*<([^<>]+)>$/.exec(raw);
+  if (m === null) return { name: raw, addr: raw };
+  return { name: m[1].trim() || m[2], addr: m[2] };
+}
+
 const PROVIDER_LABEL: Record<Provider, string> = {
   gmail: "Gmail",
   outlook: "Outlook",
@@ -309,6 +315,31 @@ export default function SchoolSiftApp({
     (m) => m.status === "awaiting_agent",
   ).length;
   const failedMessages = messages.filter((m) => m.status === "failed");
+  const timeZone = boot?.household?.timezone;
+
+  const receivedAt = new Map(messages.map((m) => [m.id, m.received_at]));
+  const pendingOf = (p: (typeof packets)[number]) =>
+    headProposals(p).filter((v) => v.status === "proposed").length;
+  const packetRank = (p: (typeof packets)[number]) =>
+    p.urgency === "urgent" ? 0 : p.urgency === "soon" ? 1 : pendingOf(p) > 0 ? 2 : 3;
+  const tsOrMax = (iso: string | null | undefined) => {
+    const t = Date.parse(iso ?? "");
+    return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+  };
+  const byUrgencyThenDeadline = (
+    a: (typeof packets)[number],
+    b: (typeof packets)[number],
+  ) =>
+    packetRank(a) - packetRank(b) ||
+    tsOrMax(a.deadline) - tsOrMax(b.deadline) ||
+    tsOrMax(receivedAt.get(a.source_message_id)) -
+      tsOrMax(receivedAt.get(b.source_message_id));
+  const decisionPackets = packets
+    .filter((p) => !p.information_only)
+    .sort(byUrgencyThenDeadline);
+  const infoPackets = packets
+    .filter((p) => p.information_only)
+    .sort(byUrgencyThenDeadline);
   const selected = packets.find((p) => p.id === selectedId);
   const activeMembership =
     boot?.memberships.find(
@@ -318,6 +349,46 @@ export default function SchoolSiftApp({
   const canEdit = role !== "viewer";
   const isOwner = role === "owner";
   const hasHousehold = boot !== null && boot.household !== null;
+
+  const renderRailItem = (p: (typeof packets)[number]) => {
+    const pending = pendingOf(p);
+    const sender = railSenderParts(p.sender);
+    const pill = p.information_only
+      ? { label: "Info", tone: "info" }
+      : p.urgency === "urgent"
+        ? { label: "Urgent", tone: "urgent" }
+        : p.urgency === "soon"
+          ? { label: "Soon", tone: "soon" }
+          : null;
+    return (
+      <li key={p.id} className="rail-item">
+        <span className="sift-mark" aria-hidden="true" />
+        <button
+          type="button"
+          className={`rail-message${p.id === selectedId ? " is-selected" : ""}`}
+          onClick={() => setSelectedId(p.id)}
+          aria-current={p.id === selectedId ? "true" : undefined}
+        >
+          <span className="rail-sender" title={sender.addr}>
+            {sender.name}
+          </span>
+          <span className="rail-subject">{p.subject}</span>
+          <span className="rail-meta">
+            {pill !== null && (
+              <span className={`rail-pill rail-pill-${pill.tone}`}>
+                {pill.label}
+              </span>
+            )}
+            {pending > 0
+              ? `${pending} to decide`
+              : p.information_only
+                ? null
+                : "Decided"}
+          </span>
+        </button>
+      </li>
+    );
+  };
 
   const processAwaiting = () =>
     run(async () => {
@@ -426,7 +497,7 @@ export default function SchoolSiftApp({
 
       {loading ? (
         <p className="app-status" role="status">
-          Loading SchoolSift…
+          Loading your household…
         </p>
       ) : boot === null ? null : boot.household === null &&
         boot.memberships.length > 0 ? (
@@ -587,34 +658,32 @@ export default function SchoolSiftApp({
                     )}
                   </div>
                 ) : (
-                  <ol className="rail-list">
-                    {packets.map((p) => {
-                      const pending = headProposals(p).filter(
-                        (v) => v.status === "proposed",
-                      ).length;
-                      return (
-                        <li key={p.id} className="rail-item">
-                          <span className="sift-mark" aria-hidden="true" />
-                          <button
-                            type="button"
-                            className={`rail-message${p.id === selectedId ? " is-selected" : ""}`}
-                            onClick={() => setSelectedId(p.id)}
-                            aria-current={p.id === selectedId ? "true" : undefined}
-                          >
-                            <span className="rail-sender">{p.sender}</span>
-                            <span className="rail-subject">{p.subject}</span>
-                            <span className="rail-meta">
-                              {pending > 0
-                                ? `${pending} proposal${pending === 1 ? "" : "s"} to review`
-                                : p.information_only
-                                  ? "Information only"
-                                  : "Decided"}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
+                  <>
+                    {decisionPackets.length > 0 && (
+                      <section
+                        className="rail-group"
+                        aria-label="Needs a decision"
+                      >
+                        <h3 className="rail-group-title">Needs a decision</h3>
+                        <ol className="rail-list">
+                          {decisionPackets.map(renderRailItem)}
+                        </ol>
+                      </section>
+                    )}
+                    {infoPackets.length > 0 && (
+                      <section
+                        className="rail-group"
+                        aria-label="For your information"
+                      >
+                        <h3 className="rail-group-title">
+                          For your information
+                        </h3>
+                        <ol className="rail-list">
+                          {infoPackets.map(renderRailItem)}
+                        </ol>
+                      </section>
+                    )}
+                  </>
                 )}
                 {failedMessages.length > 0 && (
                   <div className="rail-failed">
@@ -666,6 +735,7 @@ export default function SchoolSiftApp({
                     packet={selected}
                     executions={executions}
                     localMode={boot.mode === "local"}
+                    timeZone={timeZone}
                     busyKey={busyKey}
                     conflicts={conflicts}
                     readOnly={!canEdit}

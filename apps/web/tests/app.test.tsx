@@ -353,6 +353,41 @@ describe("SchoolSiftApp packets", () => {
       expect(reanalyzeMessage).toHaveBeenCalledWith("msg-1"),
     );
   });
+
+  it("groups the rail into decisions and information with status pills", () => {
+    render(
+      <SchoolSiftApp
+        initialBootstrap={{
+          ...bootstrapWithPacket,
+          packets: [
+            ...bootstrapWithPacket.packets,
+            {
+              ...bootstrapWithPacket.packets[0],
+              id: "packet-info",
+              subject: "Newsletter",
+              information_only: true,
+              urgency: "none" as const,
+              proposals: [],
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Needs a decision")).toBeInTheDocument();
+    expect(screen.getByText("For your information")).toBeInTheDocument();
+    expect(screen.getByText("Soon")).toBeInTheDocument();
+    expect(screen.getByText("Info")).toBeInTheDocument();
+    expect(screen.getByText("1 to decide")).toBeInTheDocument();
+  });
+
+  it("shows only the sender display name on rail rows", () => {
+    render(<SchoolSiftApp initialBootstrap={bootstrapWithPacket} />);
+    const sender = screen.getByText("Maple Grove Office");
+    expect(sender).toHaveAttribute("title", "office@maplegrove.example");
+    expect(
+      screen.queryByText(/Maple Grove Office </),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("SchoolSiftApp resilience", () => {

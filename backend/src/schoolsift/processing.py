@@ -112,8 +112,8 @@ def _validate_draft(
                     EscalationProposal(
                         kind="escalation",
                         reason="unsupported_document",
-                        detail=f"'{payload.document_name}' needs to be completed"
-                        f" by hand: {e.message}",
+                        detail=f"SchoolSift could not fill '{payload.document_name}'"
+                        f" safely, so it needs completing by hand. ({e.message})",
                     )
                 )
                 continue

@@ -11,6 +11,13 @@ import type {
 } from "../lib/contracts";
 import { formatRangeInZone } from "../lib/dates";
 
+const ESCALATION_LABEL: Record<string, string> = {
+  payment: "Payment required — handle this yourself",
+  signature: "Signature required — handle this yourself",
+  uncertain: "Needs your judgement",
+  unsupported_document: "Form to complete by hand",
+};
+
 type Props = {
   readOnly?: boolean;
   version: ProposalVersion;
@@ -301,7 +308,9 @@ export default function ProposalReview({
 
       {version.payload.kind === "escalation" && (
         <div className="proposal-fields">
-          <p className="escalation-reason">Reason: {version.payload.reason}</p>
+          <p className="escalation-reason">
+            {ESCALATION_LABEL[version.payload.reason] ?? version.payload.reason}
+          </p>
           <p>{version.payload.detail}</p>
           <p className="field-note">
             Escalations are for a human to handle — SchoolSift can never approve

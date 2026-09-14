@@ -38,6 +38,9 @@ def main() -> int:
             continue
         if path.suffix in SKIP_SUFFIXES or path.name in SKIP_NAMES:
             continue
+        # Local env files are gitignored and are expected to hold real values.
+        if path.name.startswith(".env") and path.name != ".env.example":
+            continue
         if path.suffix == ".html" and path.is_relative_to(SKIP_GENERATED):
             continue
         try:

@@ -613,6 +613,12 @@ def create_app(
         _require_edit(membership)
         return store.reset_failed_message(membership.household_id, message_id)
 
+    @app.post("/v1/messages/{message_id}/reanalyze")
+    def reanalyze_message(request: Request, message_id: str) -> MessageRecord:
+        membership = _membership(request)
+        _require_edit(membership)
+        return store.reset_processed_message(membership.household_id, message_id)
+
     @app.get("/v1/action-packets")
     def action_packets(request: Request) -> list[ActionPacket]:
         membership = _membership_or_none(request)

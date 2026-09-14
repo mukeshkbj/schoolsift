@@ -491,3 +491,36 @@ def test_model_access_error_leaves_message_awaiting(env):
     after = store.get_message_record(h.id, record.id)
     assert after.status == "awaiting_agent"
     assert after.manual_review_reason is None
+
+
+def test_packet_records_attachments_and_cited_flags(env):
+    store, h, _, record = env
+    draft = draft_for(record.id)
+    draft.evidence.append(EvidenceSpan(source="form.pdf", quote="sign here"))
+    packet = process_message(h.id, record.id, store=store, analyzer=FakeAnalyzer(draft))
+    by_name = {a.name: a for a in packet.attachments}
+    assert by_name["form.pdf"].mime == "application/pdf"
+    assert by_name["form.pdf"].cited is True
+    assert by_name["note.txt"].cited is False
+
+    reloaded = store.get_packet(h.id, packet.id)
+    assert [a.name for a in reloaded.attachments] == [
+        a.name for a in packet.attachments
+    ]
+
+
+def test_packet_attachments_empty_without_documents(env):
+    store, h, _, record = env
+    con = __import__("sqlite3").connect(store.path)
+    try:
+        con.execute("DELETE FROM documents WHERE message_id = ?", (record.id,))
+        con.commit()
+    finally:
+        con.close()
+    packet = process_message(
+        h.id,
+        record.id,
+        store=store,
+        analyzer=FakeAnalyzer(draft_for(record.id)),
+    )
+    assert packet.attachments == []

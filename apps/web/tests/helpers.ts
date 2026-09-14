@@ -96,8 +96,15 @@ export const packet = {
   deadline: "2026-09-18T00:00:00Z",
   urgency: "soon" as const,
   information_only: false,
-  evidence: [{ source: "body", quote: "permission form by Friday, September 18" }],
+  evidence: [
+    { source: "body", quote: "permission form by Friday, September 18" },
+    { source: "trip-letter.pdf", quote: "The coach departs at 09:00" },
+  ],
   uncertainties: [],
+  attachments: [
+    { name: "trip-letter.pdf", mime: "application/pdf", cited: true },
+    { name: "lunch-menu.docx", mime: "application/msword", cited: false },
+  ],
   proposals: [replyVersion],
 };
 

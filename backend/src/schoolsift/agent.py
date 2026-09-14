@@ -42,6 +42,16 @@ evidence `source` must be exactly `body` for the email text, or the exact \
 attachment filename for a document.
 - Set `source_message_id` to the message id you were given.
 - Identify the child concerned, any deadline, and the urgency.
+- Read every attached document as part of the message; when a fact comes \
+from an attachment, quote it in evidence with the filename as its source.
+- When the email or an attachment states a dated event or deadline that \
+affects the child — a return-to-school day, a trip, a vaccination day, the \
+first session of a recurring activity, or a form due date — propose a \
+calendar event (kind `calendar` with `title`, timezone-aware `starts_at` \
+and `ends_at` in ISO 8601 with an explicit offset; use the household time \
+zone when the message names none). For recurring sessions propose the \
+first occurrence and mention the recurrence in the title. Such messages \
+are not `information_only`.
 - Propose only: a reply constrained to the source thread's sender/reply-to, \
 a calendar event, or a fillable-PDF form using AcroForm fields.
 - Escalate (never propose) anything involving payments, legally binding \

@@ -3,12 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import SchoolSiftApp from "../components/SchoolSiftApp";
 import {
+  bootstrapAwaitingAgent,
   bootstrapConnected,
   bootstrapEmpty,
   bootstrapHouseholdOnly,
   bootstrapReady,
   bootstrapWithPacket,
   bootstrapWithSource,
+  inboxMessage,
   suggestedSource,
 } from "./helpers";
 
@@ -25,6 +27,7 @@ vi.mock("../lib/api", async () => {
     confirmSource: vi.fn(),
     rejectSource: vi.fn(),
     processMessage: vi.fn(),
+    reanalyzeMessage: vi.fn(),
     editProposal: vi.fn(),
     approveProposal: vi.fn(),
     rejectProposal: vi.fn(),
@@ -293,6 +296,62 @@ describe("SchoolSiftApp packets", () => {
     expect(
       await screen.findByText(/queued for delivery/i),
     ).toBeInTheDocument();
+  });
+
+  it("shows which attachments were read, marking cited ones", async () => {
+    const { container } = render(
+      <SchoolSiftApp initialBootstrap={bootstrapWithPacket} />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /field trip/i }),
+    );
+    expect(screen.getByText("Read:")).toBeInTheDocument();
+    const chips = Array.from(
+      container.querySelectorAll(".attachment-chip"),
+    ) as HTMLElement[];
+    expect(chips.map((c) => c.textContent)).toEqual([
+      "trip-letter.pdf",
+      "lunch-menu.docx",
+    ]);
+    expect(chips[0]).toHaveClass("is-cited");
+    expect(chips[1]).not.toHaveClass("is-cited");
+  });
+
+  it("labels evidence sources as Email for the body or the filename", async () => {
+    const { container } = render(
+      <SchoolSiftApp initialBootstrap={bootstrapWithPacket} />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /field trip/i }),
+    );
+    const sources = Array.from(
+      container.querySelectorAll(".evidence-source"),
+    ).map((el) => el.textContent);
+    expect(sources).toEqual(["Email", "trip-letter.pdf"]);
+    expect(screen.queryByText("body")).not.toBeInTheDocument();
+  });
+
+  it("re-runs the analysis through the API and warns proposals are discarded", async () => {
+    const { reanalyzeMessage, getBootstrap } = await api();
+    vi.mocked(reanalyzeMessage).mockResolvedValue({
+      ...inboxMessage,
+      id: "msg-1",
+      status: "awaiting_agent" as const,
+    });
+    vi.mocked(getBootstrap).mockResolvedValue(bootstrapAwaitingAgent);
+    render(<SchoolSiftApp initialBootstrap={bootstrapWithPacket} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /field trip/i }),
+    );
+    expect(
+      screen.getByText(/current proposals are discarded/i),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Re-analyze" }),
+    );
+    await waitFor(() =>
+      expect(reanalyzeMessage).toHaveBeenCalledWith("msg-1"),
+    );
   });
 });
 

@@ -540,6 +540,50 @@ input:disabled, textarea:disabled {
   color: var(--mark-text);
 }
 
+.packet-tools {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.packet-tools-note {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.packet-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.packet-attachments-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.attachment-chip {
+  font-size: 0.8rem;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--ruled);
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+.attachment-chip.is-cited {
+  border-color: var(--chalk);
+  background: rgba(23, 107, 91, 0.09);
+  color: var(--chalk);
+  font-weight: 600;
+}
+
 .packet-none {
   color: var(--ink-soft);
   font-style: italic;

@@ -71,6 +71,12 @@ class ProposalVersion(BaseModel):
     payload_hash: str
 
 
+class PacketAttachment(BaseModel):
+    name: str = Field(max_length=1_000)
+    mime: str = Field(max_length=200)
+    cited: bool = False
+
+
 class ActionPacket(BaseModel):
     id: str = Field(max_length=200)
     source_message_id: str = Field(max_length=500)
@@ -83,6 +89,7 @@ class ActionPacket(BaseModel):
     information_only: bool
     evidence: list[EvidenceSpan] = Field(max_length=100)
     uncertainties: list[BoundedStr] = Field(max_length=100)
+    attachments: list[PacketAttachment] = Field(default_factory=list, max_length=100)
     proposals: list[ProposalVersion] = Field(max_length=500)
 
     def head_proposals(self) -> list[ProposalVersion]:

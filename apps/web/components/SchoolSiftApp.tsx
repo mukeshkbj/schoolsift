@@ -22,6 +22,7 @@ import {
   enableNotifications,
   getBootstrap,
   processMessage,
+  reanalyzeMessage,
   retryMessage,
   runExecution,
   rejectProposal,
@@ -210,6 +211,12 @@ export default function SchoolSiftApp({
 
   const onRetry = (messageId: string) =>
     run(() => retryMessage(messageId), `retry:${messageId}`);
+
+  const onReanalyze = (messageId: string) =>
+    run(async () => {
+      await reanalyzeMessage(messageId);
+      setSelectedId(null);
+    }, `reanalyze:${messageId}`);
 
   const onProcess = (messageId: string) =>
     run(async () => {
@@ -666,6 +673,7 @@ export default function SchoolSiftApp({
                     onApprove={onApprove}
                     onReject={onReject}
                     onReload={refresh}
+                    onReanalyze={onReanalyze}
                     onDispatch={onDispatch}
                     onRun={onRun}
                   />

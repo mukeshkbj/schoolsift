@@ -9,6 +9,7 @@ from .domain import (
     ActionPacket,
     ActionPacketDraft,
     EscalationProposal,
+    PacketAttachment,
     PdfFormProposal,
     ProposalPayload,
     ProposalVersion,
@@ -151,6 +152,7 @@ def process_message(
     except Exception as e:
         _mark_failed(store, household_id, record)
         raise AgentError("The agent could not process this message.") from e
+    cited_sources = {e.source for e in draft.evidence}
     sender = (
         f"{record.sender_name} <{record.sender_email}>"
         if record.sender_name and record.sender_name != record.sender_email
@@ -168,6 +170,14 @@ def process_message(
         information_only=draft.information_only,
         evidence=draft.evidence,
         uncertainties=draft.uncertainties,
+        attachments=[
+            PacketAttachment(
+                name=d.name,
+                mime=d.mime,
+                cited=d.name in cited_sources,
+            )
+            for d in docs
+        ],
         proposals=[
             ProposalVersion(
                 id=f"prop-{secrets.token_hex(8)}",

@@ -112,6 +112,9 @@ export const rejectSource = (sourceId: string) =>
 export const retryMessage = (messageId: string) =>
   request(`/v1/messages/${messageId}/retry`, messageSchema, post());
 
+export const reanalyzeMessage = (messageId: string) =>
+  request(`/v1/messages/${messageId}/reanalyze`, messageSchema, post());
+
 export const processMessage = (messageId: string) =>
   request(`/v1/messages/${messageId}/process`, actionPacketSchema, post());
 

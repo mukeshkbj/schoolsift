@@ -223,6 +223,10 @@ class SchoolSiftStore(Protocol):
         self, household_id: str, message_id: str
     ) -> MessageRecord: ...
 
+    def reset_processed_message(
+        self, household_id: str, message_id: str
+    ) -> MessageRecord: ...
+
     def get_document_record(
         self, household_id: str, document_id: str
     ) -> DocumentRecord: ...

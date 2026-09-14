@@ -18,6 +18,7 @@ type Props = {
   onApprove: (version: ProposalVersion) => Promise<void>;
   onReject: (version: ProposalVersion) => Promise<void>;
   onReload: () => Promise<void>;
+  onReanalyze?: (messageId: string) => Promise<void>;
   onDispatch?: () => Promise<void>;
   onRun?: (execution: ExecutionRecord) => Promise<void>;
 };
@@ -42,6 +43,7 @@ export default function ActionPacketView({
   onApprove,
   onReject,
   onReload,
+  onReanalyze,
   onDispatch,
   onRun,
   readOnly = false,
@@ -70,9 +72,40 @@ export default function ActionPacketView({
             <span className="fact fact-info">Information only</span>
           )}
         </div>
+        {!readOnly && onReanalyze && (
+          <div className="packet-tools">
+            <button
+              type="button"
+              className="btn btn-quiet btn-sm"
+              disabled={busyKey === `reanalyze:${packet.source_message_id}`}
+              aria-busy={busyKey === `reanalyze:${packet.source_message_id}`}
+              onClick={() => onReanalyze(packet.source_message_id)}
+            >
+              Re-analyze
+            </button>
+            <span className="packet-tools-note">
+              Re-runs the analysis; current proposals are discarded.
+            </span>
+          </div>
+        )}
       </header>
 
       <p className="packet-summary">{packet.summary}</p>
+
+      {packet.attachments.length > 0 && (
+        <div className="packet-attachments">
+          <span className="packet-attachments-label">Read:</span>
+          {packet.attachments.map((a) => (
+            <span
+              key={a.name}
+              className={`attachment-chip${a.cited ? " is-cited" : ""}`}
+              title={a.cited ? "Used as evidence" : undefined}
+            >
+              {a.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {packet.evidence.length > 0 && (
         <section className="packet-section" aria-label="Evidence">
@@ -80,7 +113,9 @@ export default function ActionPacketView({
           <ul className="evidence-list">
             {packet.evidence.map((e) => (
               <li key={`${e.source}:${e.quote}`} className="evidence-item">
-                <span className="evidence-source">{e.source}</span>
+                <span className="evidence-source">
+                  {e.source === "body" ? "Email" : e.source}
+                </span>
                 <blockquote className="evidence-quote">{e.quote}</blockquote>
               </li>
             ))}

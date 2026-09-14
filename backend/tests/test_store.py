@@ -10,7 +10,11 @@ from schoolsift.domain import (
     ReplyProposal,
     payload_digest,
 )
-from schoolsift.errors import ConflictError, NotApprovableError
+from schoolsift.errors import (
+    ConflictError,
+    NotApprovableError,
+    NotFoundError,
+)
 from schoolsift.sqlite_store import SQLiteStore
 
 
@@ -1108,3 +1112,85 @@ def test_migration_v10_backfills_sender_names(tmp_path):
     assert srcs["office@x.org"].message_count == 2
     assert srcs["quiet@y.org"].sender_name == ""
     assert srcs["quiet@y.org"].message_count == 0
+
+
+def test_packet_attachments_round_trip(store):
+    from schoolsift.domain import PacketAttachment
+
+    h = store.create_household(name="A", timezone="UTC")
+    seed_message(store, h.id)
+    packet = make_packet()
+    packet.attachments = [
+        PacketAttachment(name="form.pdf", mime="application/pdf", cited=True),
+        PacketAttachment(name="note.txt", mime="text/plain", cited=False),
+    ]
+    store.save_packet(h.id, packet)
+    loaded = store.get_packet(h.id, "packet-1")
+    assert [(a.name, a.mime, a.cited) for a in loaded.attachments] == [
+        ("form.pdf", "application/pdf", True),
+        ("note.txt", "text/plain", False),
+    ]
+
+
+def test_packet_row_without_attachments_field_loads_empty(store):
+    import json
+
+    h = store.create_household(name="A", timezone="UTC")
+    seed_message(store, h.id)
+    data = make_packet().model_dump(mode="json")
+    data.pop("attachments")
+    con = sqlite3.connect(store.path)
+    try:
+        con.execute(
+            "INSERT INTO packets (id, household_id, source_message_id, data,"
+            " updated_at) VALUES ('packet-1', ?, 'msg-1', ?, ?)",
+            (h.id, json.dumps(data), datetime.now(UTC).isoformat()),
+        )
+        con.commit()
+    finally:
+        con.close()
+    loaded = store.get_packet(h.id, "packet-1")
+    assert loaded.attachments == []
+    assert loaded.proposals[0].id == "packet-1-prop-1"
+
+
+def test_reset_processed_message_discards_packet(store):
+    h = store.create_household(name="A", timezone="UTC")
+    seed_message(store, h.id, status="processed")
+    store.save_packet(h.id, make_packet())
+
+    updated = store.reset_processed_message(h.id, "msg-1")
+    assert updated.status == "awaiting_agent"
+    assert updated.manual_review_reason is None
+    assert store.get_packet_for_message(h.id, "msg-1") is None
+
+
+def test_reset_processed_message_rejects_unsafe_states(store):
+    h = store.create_household(name="A", timezone="UTC")
+    seed_message(store, h.id, status="awaiting_agent")
+    with pytest.raises(ConflictError):
+        store.reset_processed_message(h.id, "msg-1")
+
+    con = sqlite3.connect(store.path)
+    try:
+        con.execute("UPDATE messages SET status = 'processed' WHERE id = 'msg-1'")
+        con.commit()
+    finally:
+        con.close()
+    with pytest.raises(ConflictError):
+        store.reset_processed_message(h.id, "msg-1")
+
+    store.save_packet(h.id, make_packet())
+    packet = store.get_packet(h.id, "packet-1")
+    head = packet.proposals[0]
+    store.approve_proposal(
+        h.id, head.id, version=head.version, payload_hash=head.payload_hash
+    )
+    with pytest.raises(ConflictError):
+        store.reset_processed_message(h.id, "msg-1")
+    assert store.get_packet(h.id, "packet-1") is not None
+
+    with pytest.raises(NotFoundError):
+        store.reset_processed_message(h.id, "missing")
+    with pytest.raises(NotFoundError):
+        store.reset_processed_message("hh-other", "msg-1")

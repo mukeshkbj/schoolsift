@@ -1143,6 +1143,67 @@ class SQLiteStore:
             con.close()
         return _message_row(row)
 
+    def reset_processed_message(
+        self, household_id: str, message_id: str
+    ) -> MessageRecord:
+        con = self._connect()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute(
+                f"SELECT {MESSAGE_COLS} FROM messages"
+                " WHERE id = ? AND household_id = ?",
+                (message_id, household_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError(f"Unknown message: {message_id}")
+            record = _message_row(row)
+            if record.status != "processed":
+                raise ConflictError("This message has not been processed yet.")
+            packet_row = con.execute(
+                "SELECT data FROM packets WHERE household_id = ?"
+                " AND source_message_id = ?",
+                (household_id, message_id),
+            ).fetchone()
+            if packet_row is None:
+                raise ConflictError("This message has no packet to discard.")
+            packet = ActionPacket.model_validate_json(packet_row[0])
+            proposal_ids = {v.id for v in packet.proposals}
+            if any(v.status in ("approved", "completed") for v in packet.proposals):
+                raise ConflictError(
+                    "Approved actions exist — they cannot be discarded."
+                )
+            if proposal_ids:
+                placeholders = ",".join("?" for _ in proposal_ids)
+                used = con.execute(
+                    f"SELECT COUNT(*) FROM executions WHERE household_id = ?"
+                    f" AND proposal_id IN ({placeholders})",
+                    (household_id, *proposal_ids),
+                ).fetchone()[0]
+                if used > 0:
+                    raise ConflictError(
+                        "Approved actions exist — they cannot be discarded."
+                    )
+            con.execute(
+                "DELETE FROM packets WHERE household_id = ? AND source_message_id = ?",
+                (household_id, message_id),
+            )
+            con.execute(
+                "UPDATE messages SET status = 'awaiting_agent',"
+                " manual_review_reason = NULL WHERE id = ?",
+                (message_id,),
+            )
+            row = con.execute(
+                f"SELECT {MESSAGE_COLS} FROM messages WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+        return _message_row(row)
+
     def list_messages(self, household_id: str) -> list[MessageRecord]:
         con = self._connect()
         try:

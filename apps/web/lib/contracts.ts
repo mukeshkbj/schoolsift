@@ -101,6 +101,15 @@ export const actionPacketSchema = z.object({
   information_only: z.boolean(),
   evidence: z.array(z.object({ source: z.string(), quote: z.string() })),
   uncertainties: z.array(z.string()),
+  attachments: z
+    .array(
+      z.object({
+        name: z.string(),
+        mime: z.string(),
+        cited: z.boolean(),
+      })
+    )
+    .default([]),
   proposals: z.array(proposalVersionSchema),
 });
 

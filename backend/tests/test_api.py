@@ -1156,3 +1156,82 @@ def test_message_retry_viewer_forbidden(store):
     assert (
         viewer.post(f"/v1/messages/{record.id}/retry", headers=auth).status_code == 403
     )
+
+
+def test_message_reanalyze_discards_packet(settings, store):
+    c = TestClient(
+        create_app(settings=settings, store=store, providers={}, vault=FakeVault())
+    )
+    h = store.create_household(name="H", timezone="UTC")
+    seed_packet(store, h.id)
+    assert store.get_packet_for_message(h.id, "msg-1") is not None
+
+    r = c.post("/v1/messages/msg-1/reanalyze")
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_agent"
+    assert r.json()["manual_review_reason"] is None
+    assert store.get_packet_for_message(h.id, "msg-1") is None
+    assert c.get("/v1/action-packets").json() == []
+
+
+def test_message_reanalyze_rejects_unsafe_states(settings, store):
+    c = TestClient(
+        create_app(settings=settings, store=store, providers={}, vault=FakeVault())
+    )
+    h = store.create_household(name="H", timezone="UTC")
+
+    # never processed -> 409
+    record = _seed_awaiting_message(store, h.id)
+    r = c.post(f"/v1/messages/{record.id}/reanalyze")
+    assert r.status_code == 409
+    assert store.get_message_record(h.id, record.id).status == "awaiting_agent"
+
+    # approved proposal with an execution -> 409, packet kept
+    _approve(c, store, h.id)
+    r = c.post("/v1/messages/msg-1/reanalyze")
+    assert r.status_code == 409
+    assert store.get_packet_for_message(h.id, "msg-1") is not None
+    msgs = {m["id"]: m for m in c.get("/v1/messages").json()}
+    assert msgs["msg-1"]["status"] == "processed"
+
+    assert c.post("/v1/messages/missing/reanalyze").status_code == 404
+
+
+def test_message_reanalyze_viewer_forbidden(store):
+    import sqlite3
+    from datetime import UTC, datetime
+
+    h = store.create_household_for_owner(
+        Principal(user_id="owner-1", email="o@x.com"), name="H", timezone="UTC"
+    )
+    con = sqlite3.connect(store.path)
+    try:
+        con.execute(
+            "INSERT INTO memberships (household_id, user_id, email, role,"
+            " created_at) VALUES (?, 'viewer-1', 'v@x.com', 'viewer', ?)",
+            (h.id, datetime.now(UTC).isoformat()),
+        )
+        con.commit()
+    finally:
+        con.close()
+    seed_packet(store, h.id)
+    settings = Settings(
+        environment="local",
+        auth_mode="cognito",
+        cognito_issuer="https://issuer.example",
+        cognito_audience="aud",
+        database_path=store.path,
+        allowed_origins=("http://localhost:3210",),
+    )
+    viewer = TestClient(
+        create_app(
+            settings=settings,
+            store=store,
+            providers={},
+            vault=FakeVault(),
+            token_verifier=FakeVerifier(Principal(user_id="viewer-1", email="v@x.com")),
+        )
+    )
+    auth = {"Authorization": "Bearer t", "X-SchoolSift-Household": h.id}
+    assert viewer.post("/v1/messages/msg-1/reanalyze", headers=auth).status_code == 403
+    assert store.get_packet_for_message(h.id, "msg-1") is not None

@@ -2,6 +2,7 @@
 
 Hackathon: Agents for Humans (Everyday Agents track)
 Repository: https://github.com/mukeshkbj/schoolsift
+Video: https://www.youtube.com/watch?v=3seZeoErrOk
 builder.aws post: https://builder.aws.com/content/3JJrjwp1ua3qPA6TGCBDgLQi4S3/agents-for-humans-building-schoolsift-an-agent-that-reads-school-letters-so-parents-dont-miss-the-deadline
 
 ## Tagline

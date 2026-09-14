@@ -2,12 +2,16 @@ import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { SchoolSiftStack } from "../lib/schoolsift-stack.ts";
+import {
+  SchoolSiftStack,
+  type SchoolSiftStackProps,
+} from "../lib/schoolsift-stack.ts";
 
-function template(): Template {
+function template(props: SchoolSiftStackProps = {}): Template {
   const app = new App();
   const stack = new SchoolSiftStack(app, "TestStack", {
     env: { account: "000000000000", region: "us-east-1" },
+    ...props,
   });
   return Template.fromStack(stack);
 }
@@ -215,6 +219,55 @@ describe("SchoolSiftStack", () => {
     expect(
       authorizer["CustomJWTAuthorizer"]["AllowedClients"],
     ).toBeUndefined();
+  });
+
+  it("omits the AgentCore runtime when includeAgentRuntime is false", () => {
+    const t = template({ includeAgentRuntime: false });
+    const runtimes = t.findResources("AWS::BedrockAgentCore::Runtime");
+    expect(Object.keys(runtimes)).toHaveLength(0);
+    const parameters = Object.keys(
+      (JSON.parse(JSON.stringify(t.toJSON()))["Parameters"] ?? {}) as Record<
+        string,
+        unknown
+      >,
+    );
+    expect(parameters).not.toContain("AgentCodeBucket");
+    expect(parameters).not.toContain("AgentCodePrefix");
+    expect(parameters).not.toContain("AgentCodeVersionId");
+    expect(parameters).toContain("GmailTopic");
+    t.resourceCountIs("AWS::KMS::Key", 1);
+    expect(Object.keys(t.findResources("AWS::S3::Bucket")).length).toBe(1);
+    expect(
+      Object.keys(t.findResources("AWS::DynamoDB::Table")).length,
+    ).toBe(1);
+    expect(
+      Object.keys(t.findResources("AWS::SQS::Queue")).length,
+    ).toBe(4);
+    expect(
+      Object.keys(t.findResources("AWS::Cognito::UserPool")).length,
+    ).toBe(1);
+    const outputs = Object.keys(t.findOutputs("*"));
+    expect(outputs).not.toContain("AgentRuntimeArn");
+    expect(Object.keys(t.findResources("AWS::Logs::LogGroup")).length)
+      .toBeGreaterThan(0);
+    const roles = t.findResources("AWS::IAM::Role");
+    expect(
+      Object.keys(roles).some((id) => id.startsWith("AgentRuntimeRole")),
+    ).toBe(true);
+  });
+
+  it("includes the AgentCore runtime by default", () => {
+    const t = template();
+    t.resourceCountIs("AWS::BedrockAgentCore::Runtime", 1);
+    expect(Object.keys(t.findOutputs("*"))).toContain("AgentRuntimeArn");
+  });
+
+  it("gives the Gmail topic parameter an unset default", () => {
+    const t = template();
+    t.hasParameter("GmailTopic", {
+      Type: "String",
+      Default: "projects/unset/topics/unset",
+    });
   });
 
   it("creates a Cognito hosted UI domain and outputs its origin", () => {

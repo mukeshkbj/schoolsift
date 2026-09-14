@@ -25,6 +25,7 @@ export interface SchoolSiftStackProps extends StackProps {
   readonly callbackUrls?: string[];
   readonly logoutUrls?: string[];
   readonly cognitoDomainPrefix?: string;
+  readonly includeAgentRuntime?: boolean;
 }
 
 export class SchoolSiftStack extends Stack {
@@ -38,25 +39,16 @@ export class SchoolSiftStack extends Stack {
     const logoutUrls = props.logoutUrls ?? ["http://localhost:3210/"];
     const cognitoDomainPrefix =
       props.cognitoDomainPrefix ?? "schoolsift-dev";
+    const includeAgentRuntime = props.includeAgentRuntime ?? true;
 
-    const codeBucketParam = new CfnParameter(this, "AgentCodeBucket", {
-      type: "String",
-      description: "S3 bucket holding the AgentCore runtime code package",
-    });
-    const codePrefixParam = new CfnParameter(this, "AgentCodePrefix", {
-      type: "String",
-      description: "S3 key prefix of the AgentCore runtime code package",
-    });
-    const codeVersionParam = new CfnParameter(this, "AgentCodeVersionId", {
-      type: "String",
-      description: "S3 object version of the AgentCore runtime code package",
-    });
     const gmailTopicParam = new CfnParameter(this, "GmailTopic", {
       type: "String",
+      default: "projects/unset/topics/unset",
       description:
         "Fully-qualified Google Pub/Sub topic (projects/.../topics/...) " +
         "that delivers Gmail watch notifications; Pub/Sub itself is " +
-        "external and not provisioned here",
+        "external and not provisioned here. Must be set to a real topic " +
+        "before Gmail notifications work",
     });
 
     const key = new kms.Key(this, "SchoolSiftKey", {
@@ -278,62 +270,77 @@ export class SchoolSiftStack extends Stack {
         resources: [runtimeLogs.logGroupArn, `${runtimeLogs.logGroupArn}:*`],
       })
     );
-    runtimeRole.addToPolicy(
-      new iam.PolicyStatement({
-        actions: ["s3:GetObject", "s3:GetObjectVersion"],
-        resources: [
-          Fn.sub(
-            "arn:aws:s3:::${Bucket}/${Prefix}*",
-            {
-              Bucket: codeBucketParam.valueAsString,
-              Prefix: codePrefixParam.valueAsString,
-            }
-          ),
-        ],
-      })
-    );
+    let runtime: bedrockagentcore.CfnRuntime | undefined;
+    if (includeAgentRuntime) {
+      const codeBucketParam = new CfnParameter(this, "AgentCodeBucket", {
+        type: "String",
+        description: "S3 bucket holding the AgentCore runtime code package",
+      });
+      const codePrefixParam = new CfnParameter(this, "AgentCodePrefix", {
+        type: "String",
+        description: "S3 key prefix of the AgentCore runtime code package",
+      });
+      const codeVersionParam = new CfnParameter(this, "AgentCodeVersionId", {
+        type: "String",
+        description: "S3 object version of the AgentCore runtime code package",
+      });
+      runtimeRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [
+            Fn.sub(
+              "arn:aws:s3:::${Bucket}/${Prefix}*",
+              {
+                Bucket: codeBucketParam.valueAsString,
+                Prefix: codePrefixParam.valueAsString,
+              }
+            ),
+          ],
+        })
+      );
 
-    const discoveryUrl = Fn.join("", [
-      "https://cognito-idp.",
-      this.region,
-      ".amazonaws.com/",
-      userPool.userPoolId,
-      "/.well-known/openid-configuration",
-    ]);
+      const discoveryUrl = Fn.join("", [
+        "https://cognito-idp.",
+        this.region,
+        ".amazonaws.com/",
+        userPool.userPoolId,
+        "/.well-known/openid-configuration",
+      ]);
 
-    const runtime = new bedrockagentcore.CfnRuntime(this, "AgentRuntime", {
-      agentRuntimeName: "schoolsift_processor",
-      description: "SchoolSift message analysis entrypoint (no persistence)",
-      roleArn: runtimeRole.roleArn,
-      agentRuntimeArtifact: {
-        codeConfiguration: {
-          runtime: "PYTHON_3_12",
-          entryPoint: ["python", "agentcore_entry.py"],
-          code: {
-            s3: {
-              bucket: codeBucketParam.valueAsString,
-              prefix: codePrefixParam.valueAsString,
-              versionId: codeVersionParam.valueAsString,
+      runtime = new bedrockagentcore.CfnRuntime(this, "AgentRuntime", {
+        agentRuntimeName: "schoolsift_processor",
+        description: "SchoolSift message analysis entrypoint (no persistence)",
+        roleArn: runtimeRole.roleArn,
+        agentRuntimeArtifact: {
+          codeConfiguration: {
+            runtime: "PYTHON_3_12",
+            entryPoint: ["python", "agentcore_entry.py"],
+            code: {
+              s3: {
+                bucket: codeBucketParam.valueAsString,
+                prefix: codePrefixParam.valueAsString,
+                versionId: codeVersionParam.valueAsString,
+              },
             },
           },
         },
-      },
-      networkConfiguration: { networkMode: "PUBLIC" },
-      protocolConfiguration: "HTTP",
-      authorizerConfiguration: {
-        customJwtAuthorizer: {
-          discoveryUrl,
-          allowedAudience: [appClient.userPoolClientId],
+        networkConfiguration: { networkMode: "PUBLIC" },
+        protocolConfiguration: "HTTP",
+        authorizerConfiguration: {
+          customJwtAuthorizer: {
+            discoveryUrl,
+            allowedAudience: [appClient.userPoolClientId],
+          },
         },
-      },
-      environmentVariables: {
-        SCHOOLSIFT_AWS_REGION: this.region,
-        SCHOOLSIFT_CONTENT_BUCKET: contentBucket.bucketName,
-        SCHOOLSIFT_STATE_TABLE: stateTable.tableName,
-        SCHOOLSIFT_KMS_KEY_ARN: key.keyArn,
-      },
-    });
-    runtime.node.addDependency(runtimeLogs);
+        environmentVariables: {
+          SCHOOLSIFT_AWS_REGION: this.region,
+          SCHOOLSIFT_CONTENT_BUCKET: contentBucket.bucketName,
+          SCHOOLSIFT_STATE_TABLE: stateTable.tableName,
+          SCHOOLSIFT_KMS_KEY_ARN: key.keyArn,
+        },
+      });
+      runtime.node.addDependency(runtimeLogs);
+    }
 
     new CfnOutput(this, "ContentBucketName", {
       value: contentBucket.bucketName,
@@ -365,9 +372,11 @@ export class SchoolSiftStack extends Stack {
     new CfnOutput(this, "WorkerRepositoryUri", {
       value: workerRepo.repositoryUri,
     });
-    new CfnOutput(this, "AgentRuntimeArn", {
-      value: runtime.attrAgentRuntimeArn,
-    });
+    if (runtime !== undefined) {
+      new CfnOutput(this, "AgentRuntimeArn", {
+        value: runtime.attrAgentRuntimeArn,
+      });
+    }
     new CfnOutput(this, "ScheduleGroupName", {
       value: scheduleGroup.ref,
     });

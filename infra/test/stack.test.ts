@@ -194,7 +194,7 @@ describe("SchoolSiftStack", () => {
       AgentRuntimeArtifact: {
         CodeConfiguration: {
           Runtime: "PYTHON_3_12",
-          EntryPoint: ["python", "agentcore_entry.py"],
+          EntryPoint: ["agentcore_entry.py"],
           Code: {
             S3: {
               Bucket: { Ref: "AgentCodeBucket" },
@@ -260,6 +260,22 @@ describe("SchoolSiftStack", () => {
     const t = template();
     t.resourceCountIs("AWS::BedrockAgentCore::Runtime", 1);
     expect(Object.keys(t.findOutputs("*"))).toContain("AgentRuntimeArn");
+  });
+
+  it("sets the Bedrock model id on the runtime environment", () => {
+    const t = template();
+    t.hasResourceProperties("AWS::BedrockAgentCore::Runtime", {
+      EnvironmentVariables: Match.objectLike({
+        SCHOOLSIFT_BEDROCK_MODEL_ID:
+          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      }),
+    });
+    const custom = template({ bedrockModelId: "custom-model" });
+    custom.hasResourceProperties("AWS::BedrockAgentCore::Runtime", {
+      EnvironmentVariables: Match.objectLike({
+        SCHOOLSIFT_BEDROCK_MODEL_ID: "custom-model",
+      }),
+    });
   });
 
   it("gives the Gmail topic parameter an unset default", () => {

@@ -26,6 +26,7 @@ export interface SchoolSiftStackProps extends StackProps {
   readonly logoutUrls?: string[];
   readonly cognitoDomainPrefix?: string;
   readonly includeAgentRuntime?: boolean;
+  readonly bedrockModelId?: string;
 }
 
 export class SchoolSiftStack extends Stack {
@@ -40,6 +41,8 @@ export class SchoolSiftStack extends Stack {
     const cognitoDomainPrefix =
       props.cognitoDomainPrefix ?? "schoolsift-dev";
     const includeAgentRuntime = props.includeAgentRuntime ?? true;
+    const bedrockModelId =
+      props.bedrockModelId ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
     const gmailTopicParam = new CfnParameter(this, "GmailTopic", {
       type: "String",
@@ -314,7 +317,7 @@ export class SchoolSiftStack extends Stack {
         agentRuntimeArtifact: {
           codeConfiguration: {
             runtime: "PYTHON_3_12",
-            entryPoint: ["python", "agentcore_entry.py"],
+            entryPoint: ["agentcore_entry.py"],
             code: {
               s3: {
                 bucket: codeBucketParam.valueAsString,
@@ -334,6 +337,7 @@ export class SchoolSiftStack extends Stack {
         },
         environmentVariables: {
           SCHOOLSIFT_AWS_REGION: this.region,
+          SCHOOLSIFT_BEDROCK_MODEL_ID: bedrockModelId,
           SCHOOLSIFT_CONTENT_BUCKET: contentBucket.bucketName,
           SCHOOLSIFT_STATE_TABLE: stateTable.tableName,
           SCHOOLSIFT_KMS_KEY_ARN: key.keyArn,

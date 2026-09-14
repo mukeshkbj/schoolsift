@@ -27,6 +27,7 @@ new SchoolSiftStack(app, "SchoolSiftStack", {
   logoutUrls: csvContext("logoutUrls"),
   includeAgentRuntime:
     app.node.tryGetContext("includeAgentRuntime") !== "false",
+  bedrockModelId: stringContext("bedrockModelId"),
 });
 
 app.synth();

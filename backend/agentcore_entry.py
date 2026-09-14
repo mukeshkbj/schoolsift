@@ -1,9 +1,8 @@
 """AgentCore deployment-zip launcher.
 
 The AgentCore code deployment zip places this file at the artifact root and
-the runtime executes ``python agentcore_entry.py`` (the CloudFormation
-EntryPoint property allows at most two argv elements, so ``python -m`` is not
-expressible).
+the Python runtime's EntryPoint names it directly (``["agentcore_entry.py"]``);
+``python -m`` is not expressible there.
 """
 
 from schoolsift.agentcore_app import app
